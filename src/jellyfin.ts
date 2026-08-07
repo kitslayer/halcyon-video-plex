@@ -59,6 +59,35 @@ export interface Movie {
   // "(Disc N)" tags across the rom + its siblings). Only set when >= 2 —
   // it thickens a jewel-case platform's box to the multi-disc fat case.
   discCount?: number;
+  // ─── Records (see plex.ts's fetchMusicAlbums, music-only.ts) ──────────────
+  // Synthesized for a music ALBUM, which the record-store mode shelves the way
+  // the video store shelves a film. Follows the same pattern as the Romm game
+  // fields above: one flag plus the fields only that medium has, so nothing
+  // downstream needs to branch on a type union.
+  //
+  // An album reuses this shape rather than getting its own because the store
+  // renders from `Movie[]` and nothing about a shelf, a browse cursor or a
+  // checkout cares what is in the case. Where the semantics differ the album
+  // fields below win: `artist` is the name to print, not `director`.
+  album?: boolean;
+  /** Performer — Plex's parentTitle. Printed where a film prints its director. */
+  artist?: string;
+  /** Record label — Plex's `studio`. Real shops shelved by this; films can't. */
+  label?: string;
+  /** Number of tracks (Plex's leafCount), for the sleeve back. */
+  trackCount?: number;
+  /**
+   * Physical format the shop stocks this release on. Decided by release year
+   * against a cutoff (see medium-for-year in plex.ts): pressings from the
+   * vinyl era get a 12" LP sleeve, everything later gets a CD jewel case. A
+   * 1993 shop really did look like this — racks of CDs with a shrinking vinyl
+   * section — so the mix is period-accurate rather than decorative.
+   */
+  recordMedium?: 'vinyl' | 'cd';
+  /** Artist's country (Plex's per-artist Country tag) — drives the IMPORT bin. */
+  country?: string;
+  /** Artist item id, for pulling artist art and grouping a bin by performer. */
+  artistId?: string;
   // Audio/subtitle streams of the primary media source (already fetched with
   // the catalog via Fields=MediaSources) — drives the in-app player's track
   // picker. Absent for series containers, games, and discovery titles.
@@ -262,6 +291,13 @@ export interface JellyfinLibrary {
    * (see StorePlan.buildLibraryLayouts).
    */
   games?: boolean;
+  /**
+   * Synthesized by music-only.ts: this "library" is one department of a record
+   * shop (ROCK / POP, JAZZ, SOUNDTRACKS …), filed A–Z by artist rather than
+   * sub-sectioned by genre — because the genre IS the department. Un-sectioned
+   * for the same reason a Romm platform is.
+   */
+  music?: boolean;
 }
 
 /**

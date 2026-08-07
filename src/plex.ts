@@ -1124,6 +1124,244 @@ export async function fetchFirstEpisodeOfSeries(
   }
 }
 
+// ─── Music: albums as shelf stock ────────────────────────────────────────────
+
+/**
+ * Year at or before which a release is stocked on vinyl rather than CD.
+ *
+ * 1991 is when CD sales overtook vinyl in the US, so a shop set just after that
+ * shelves racks of CDs beside a shrinking LP section — which is what a real
+ * 1993 record store looked like. On a typical modern library this lands ~10% of
+ * albums on vinyl: enough to fill a browser bin, not enough to pretend the CD
+ * never happened. Slide it forward for an all-vinyl shop.
+ */
+const DEFAULT_VINYL_CUTOFF_YEAR = 1991;
+
+function vinylCutoffYear(): number {
+  try {
+    const raw = Number(localStorage.getItem('bb_vinyl_cutoff'));
+    if (Number.isFinite(raw) && raw >= 1900 && raw <= 2100) return raw;
+  } catch {
+    /* no storage */
+  }
+  return DEFAULT_VINYL_CUTOFF_YEAR;
+}
+
+/** Which format the shop stocks a release on. Unknown year → CD (the safer
+ *  default: a jewel case reads fine for anything, an LP sleeve on a 2024
+ *  digital-only release does not). */
+function mediumForYear(year: number | undefined): 'vinyl' | 'cd' {
+  return year && year <= vinylCutoffYear() ? 'vinyl' : 'cd';
+}
+
+/** Genre + country per artist, keyed by artist ratingKey. */
+type ArtistIndex = Map<string, { genres: string[]; country?: string; thumb?: string }>;
+
+/**
+ * Genres and countries for every artist in a music section.
+ *
+ * Plex puts NO genre on an album — it lives on the artist — so a shop that
+ * wants genre sections has to join the two. Fetching artists in bulk (type=8,
+ * one paged request per section) beats a detail call per album by three orders
+ * of magnitude, and it picks up `Country` on the way, which is what makes an
+ * IMPORT bin possible.
+ */
+async function fetchArtistIndex(base: string, token: string, sectionId: string): Promise<ArtistIndex> {
+  const index: ArtistIndex = new Map();
+  try {
+    for (let start = 0; ; start += PAGE_SIZE) {
+      const c = await plexGet(base, `/library/sections/${sectionId}/all`, token, {
+        type: 8,
+        'X-Plex-Container-Start': start,
+        'X-Plex-Container-Size': PAGE_SIZE,
+      });
+      const items: any[] = c?.Metadata ?? [];
+      for (const a of items) {
+        const key = String(a?.ratingKey ?? '');
+        if (!key) continue;
+        index.set(key, {
+          genres: tagList(a?.Genre),
+          country: tagList(a?.Country, 1)[0],
+          thumb: a?.thumb || undefined,
+        });
+      }
+      const total = typeof c?.totalSize === 'number' ? c.totalSize : index.size;
+      if (items.length === 0 || index.size >= total) break;
+    }
+  } catch (e) {
+    console.warn(`[Plex] Artist index unavailable for section ${sectionId} — albums lose genres:`, e);
+  }
+  return index;
+}
+
+/** One Plex album → the store's Movie shape. */
+function mapAlbumToMovie(
+  item: any,
+  base: string,
+  token: string,
+  libraryName: string,
+  artists: ArtistIndex
+): Movie {
+  rememberItem(item);
+  const artistKey = String(item?.parentRatingKey ?? '');
+  const artist = artists.get(artistKey);
+  const year = item?.year || undefined;
+  const trackCount = typeof item?.leafCount === 'number' ? item.leafCount : undefined;
+  const plays = typeof item?.viewCount === 'number' ? item.viewCount : 0;
+
+  return {
+    id: String(item?.ratingKey ?? ''),
+    title: String(item?.title ?? 'Untitled'),
+    year: year || 2000,
+    premiereDate: item?.originallyAvailableAt || undefined,
+    // Where a film prints its runtime, a record prints its FORMAT. Neither
+    // runtime nor track count is available in bulk: Plex withholds `leafCount`
+    // from album list responses (no parameter coaxes it out — checked), and
+    // fetching it would be one detail call per album. The tracklist supplies the
+    // real count when the sleeve is turned over, which is the only time it
+    // matters. See fetchAlbumTracks.
+    duration: mediumForYear(year) === 'vinyl' ? 'LP' : 'CD',
+    rating: 'NR',
+    overview: item?.summary || 'No description available.',
+    // A record's "author" is its performer. Kept in BOTH places on purpose:
+    // `artist` is what record-store code prints, `director` is what the
+    // existing video-store back-of-box template already reads.
+    director: artist ? String(item?.parentTitle ?? '') : String(item?.parentTitle ?? ''),
+    artist: String(item?.parentTitle ?? ''),
+    actors: [],
+    genres: artist?.genres ?? [],
+    localPath: '',
+    posterUrl: imageUrl(base, token, item?.thumb, 600, 600),
+    // Sleeve art is square; the artist portrait stands in for a backdrop.
+    backdropUrl: imageUrl(base, token, item?.parentThumb ?? item?.art, 1200, 1200),
+    dateCreated: typeof item?.addedAt === 'number' ? new Date(item.addedAt * 1000).toISOString() : '',
+    isSeries: false,
+    is4k: false,
+    libraryName,
+    studios: item?.studio ? [String(item.studio)] : [],
+    label: item?.studio ? String(item.studio) : undefined,
+    album: true,
+    trackCount,
+    recordMedium: mediumForYear(year),
+    country: artist?.country,
+    artistId: artistKey || undefined,
+    played: plays > 0 || undefined,
+    playCount: plays > 0 ? plays : undefined,
+    lastPlayedDate: typeof item?.lastViewedAt === 'number'
+      ? new Date(item.lastViewedAt * 1000).toISOString()
+      : undefined,
+    primaryImageAspectRatio: 1, // sleeves are square, unlike a 2:3 poster
+  };
+}
+
+/**
+ * Every album on the server, ready to shelve.
+ *
+ * Music sections are the ones fetchJellyfinLibrariesAndMovies() deliberately
+ * skips — a video store has no business shelving them. The record-store mode
+ * calls this instead.
+ */
+export async function fetchMusicAlbums(
+  plexUrl_: string,
+  token: string,
+  onProgress?: (stage: string) => void
+): Promise<Movie[]> {
+  if (!token || !plexUrl_) throw new Error('Missing connection credentials.');
+  const base = normalizeUrl(plexUrl_);
+  console.log('[Plex] Querying music sections...');
+
+  const sectionsContainer = await plexGet(base, '/library/sections', token);
+  const musicSections: any[] = (sectionsContainer?.Directory ?? []).filter((s: any) => s?.type === 'artist');
+  if (musicSections.length === 0) throw new Error('No music libraries found on this Plex server.');
+
+  const perSection = await Promise.all(
+    musicSections.map(async (section: any): Promise<Movie[]> => {
+      const name = String(section?.title ?? 'Music');
+      const id = String(section?.key ?? '');
+      onProgress?.(`music library "${name}"`);
+      try {
+        // Albums and the artist index in parallel — neither needs the other
+        // until the mapping step.
+        const [albums, artists] = await Promise.all([
+          (async () => {
+            const out: any[] = [];
+            for (let start = 0; ; start += PAGE_SIZE) {
+              const c = await plexGet(base, `/library/sections/${id}/all`, token, {
+                type: 9, // album
+                'X-Plex-Container-Start': start,
+                'X-Plex-Container-Size': PAGE_SIZE,
+              });
+              const items: any[] = c?.Metadata ?? [];
+              out.push(...items);
+              onProgress?.('page');
+              const total = typeof c?.totalSize === 'number' ? c.totalSize : out.length;
+              if (items.length === 0 || out.length >= total) break;
+            }
+            return out;
+          })(),
+          fetchArtistIndex(base, token, id),
+        ]);
+        console.info(`[Plex] Music section "${name}": ${albums.length} albums, ${artists.size} artists.`);
+        return albums.map((a) => mapAlbumToMovie(a, base, token, name, artists));
+      } catch (err) {
+        console.error(`[Plex] Failed to sync music library "${name}":`, err);
+        return [];
+      }
+    })
+  );
+
+  const albums = perSection.flat();
+  const vinyl = albums.filter((a) => a.recordMedium === 'vinyl').length;
+  console.log(`[Plex] ${albums.length} albums (${vinyl} on vinyl, ${albums.length - vinyl} on CD).`);
+  onProgress?.('done');
+  return albums;
+}
+
+/**
+ * An album's tracks, shaped as Episodes.
+ *
+ * Not a hack: album:track and series:episode are the same structure, and the
+ * store already has the machinery — an ordered picker, index-based navigation
+ * and up-next stepping. A tracklist is what a sleeve back prints, so reusing
+ * the episode path gets the whole flow for free.
+ */
+export async function fetchAlbumTracks(
+  plexUrl_: string,
+  token: string,
+  albumId: string
+): Promise<Episode[]> {
+  const base = normalizeUrl(plexUrl_);
+  try {
+    const c = await plexGet(base, `/library/metadata/${albumId}/children`, token, {
+      'X-Plex-Container-Start': 0,
+      'X-Plex-Container-Size': 500,
+    });
+    return (c?.Metadata ?? []).map((t: any): Episode => {
+      rememberItem(t);
+      return {
+        id: String(t?.ratingKey ?? ''),
+        seriesId: albumId,
+        seriesName: String(t?.parentTitle ?? ''),
+        // Discs are "seasons": a 2-disc set groups exactly the way a 2-season
+        // show does, and the picker already renders that.
+        seasonNumber: t?.parentIndex ?? 1,
+        episodeNumber: t?.index ?? 0,
+        name: String(t?.title ?? ''),
+        overview: String(t?.summary ?? ''),
+        path: t?.Media?.[0]?.Part?.[0]?.file ?? '',
+        runTimeTicks: (t?.duration ?? 0) * TICKS_PER_MS,
+        // A track has no still of its own; the sleeve stands in.
+        thumbUrl: imageUrl(base, token, t?.parentThumb ?? t?.thumb, 400, 400),
+        seasonId: t?.parentRatingKey !== undefined ? String(t.parentRatingKey) : undefined,
+        seasonPrimaryUrl: imageUrl(base, token, t?.parentThumb, 400, 400),
+      };
+    });
+  } catch (e) {
+    console.error(`[Plex] Failed to fetch tracks for album ${albumId}:`, e);
+    return [];
+  }
+}
+
 // ─── Playback reporting ──────────────────────────────────────────────────────
 
 /**

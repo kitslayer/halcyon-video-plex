@@ -245,6 +245,10 @@ export {
   checkPlexPin,
   discoverPlexServers,
   authenticatePlexAccount,
+  // Music sections are the ones the video-store sync deliberately skips; the
+  // record-store mode sources its stock from these instead.
+  fetchMusicAlbums,
+  fetchAlbumTracks,
 } from './plex.ts';
 export type { PlexPin, PlexServer } from './plex.ts';
 
