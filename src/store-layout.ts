@@ -267,9 +267,45 @@ export const BROWSE_WINDOW_SIZE = 8; // Number of columns visible at once in bro
 // height — the old 14.4 in pitch (1.8x) read airy and fake. Owner approved
 // the tightening 2026-07-30. Aisle: 5 @ 10 in, first deck 6 in. Wall: 8 @
 // 10.5 in, bottom deck ~5 in off the carpet like the footage shows.
-export const AISLE_SHELF_HEIGHTS = [0.5, 1.333, 2.167, 3.0, 3.833]; // Y coordinates for freestanding shelves
+/**
+ * Whether this session is the record shop.
+ *
+ * Read straight from storage rather than importing store-mode.ts: this module
+ * sits near the bottom of the import graph and pulling the backend in through
+ * it would close a cycle. The whole STORE is one mode, so reading it once at
+ * module load is correct — swapping shops reloads the catalog anyway.
+ */
+const IS_RECORD_STORE = (() => {
+  try {
+    const q = new URLSearchParams(window.location.search).get('store');
+    if (q === 'records') return true;
+    if (q === 'video') return false;
+    return localStorage.getItem('store_mode') === 'records';
+  } catch {
+    return false;
+  }
+})();
+
+/**
+ * Shelf tiers. A record shop's fixtures sit LOWER than a video store's: you
+ * look down into a bin and flip, rather than reading faces at eye level. Four
+ * tiers topping out near waist-to-chest height instead of five reaching over
+ * your head — which is also why a shop's sightlines run right across the floor.
+ */
+export const AISLE_SHELF_HEIGHTS = IS_RECORD_STORE
+  ? [0.55, 1.45, 2.35, 3.25]
+  : [0.5, 1.333, 2.167, 3.0, 3.833]; // Y coordinates for freestanding shelves
 export const WALL_SHELF_HEIGHTS = [0.42, 1.295, 2.17, 3.045, 3.92, 4.795, 5.67, 6.545]; // Y coordinates for New Releases wall shelves (floor-to-high coverage)
-export const BOX_SPACING = 0.58; // Space between boxes on a shelf in feet
+/**
+ * Along-run pitch per item.
+ *
+ * A face-out video case needs its own width. A record stands edge-on — an LP
+ * jacket is a quarter-inch thick — so a bin packs them shoulder to shoulder at
+ * a fraction of the pitch, which is exactly why a browser bin holds hundreds
+ * where a shelf holds a dozen. 1.7 in leaves the sleeves readable as you push
+ * them apart without pretending they have a video case's girth.
+ */
+export const BOX_SPACING = IS_RECORD_STORE ? 0.14 : 0.58; // feet
 export const LEAN_ANGLE = -10 * Math.PI / 180; // 10 degrees in radians (0.1745) leaning backward
 export const STAGGER_OFFSET = -0.04; // Offset in feet — the rental copy peeks out on LEFT (-X) of the movie cover
 // A "section" is one signboard/divider bay -- 6 columns wide. Freestanding units

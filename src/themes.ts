@@ -71,6 +71,24 @@ const HALCYON_ROOM_PALETTE = {
   counterTop: HALCYON_BLUE_LIT, // blue counter top (a touch brighter, it sits under lamps)
 } as const;
 
+/**
+ * The record shop's room, which is a different building from the video store.
+ *
+ * Every reference photo of a real record shop reads the same way: warm timber,
+ * dark walls that let the sleeve art be the only bright thing, and a floor that
+ * disappears. The video store's bright yellow drywall and blue carpet exist to
+ * look clean and corporate under fluorescents — the exact opposite instinct.
+ * So the record shop takes its own palette rather than a tint of that one.
+ */
+const RECORD_SHOP_PALETTE = {
+  secondary: '#c8873c',      // warm timber trim, the bin ends and rails
+  accent: '#e0a33f',         // amber signage and hand-lettered dividers
+  wall: '#3b332e',           // dark warm brown — sleeves are the light source
+  carpet: '#4a3f38',         // scuffed dark floor that stays out of the way
+  counterBody: '#6b4a2f',    // stained wood counter
+  counterTop: '#8a5f3a',     // worn butcher-block top
+} as const;
+
 // bb-2000's own wall departure: dusty lilac (owner ruling 2026-08-04), the
 // one era that breaks from house yellow — same shape the old sage override
 // used before the blue/gold swap.
@@ -93,6 +111,24 @@ export const WALL_PAINT_OPTIONS: Record<string, { label: string; hex: string }> 
 };
 
 export const THEMES: Record<string, StoreTheme> = {
+  // ── The record shop: same building trade, different room ───────────────────
+  'record-shop': {
+    id: 'record-shop',
+    name: 'Record Shop',
+    shelfStyleId: 'classic-trapezoid-4',
+    topperStyle: 'ticket-board',
+    palette: { primary: '#c8873c', ...RECORD_SHOP_PALETTE },
+    brand: {
+      name: 'Halcyon Records',
+      logoKind: 'emblem',
+      logo: DEFAULT_LOGO_SPECS['bb-1990'],
+    },
+    // A shop's own stock is the medium; this only picks the fallback case for
+    // anything that somehow arrives without a format of its own.
+    defaultMedium: 'dvd',
+    shelving: { frame: 'wire-black' }, // dark frames recede; the sleeves carry the colour
+    signageSet: 'halcyon-1990-signs',
+  },
   // ── 1990: the classic era — signboard genre toppers on feet ─────────────────
   'bb-1990': {
     id: 'bb-1990',
@@ -192,8 +228,25 @@ export const THEME_ALIASES: Record<string, string> = {
 
 /** Canonicalize a possibly-legacy theme id to a current THEMES key. */
 export function resolveThemeId(id: string | null | undefined): string {
-  if (!id) return 'bb-1990';
+  // The record shop is a different room, not a period of the video store, so it
+  // takes its own theme by default rather than inheriting whichever era was
+  // last picked for the films. An explicit saved choice still wins — someone
+  // who wants their records under 1990 fluorescents can have that.
+  if (!id) return isRecordShopSession() ? 'record-shop' : 'bb-1990';
   return THEME_ALIASES[id] ?? id;
+}
+
+/** Whether this session is the record shop. Read from storage rather than
+ *  imported: themes.ts sits below store-mode.ts in the import graph. */
+function isRecordShopSession(): boolean {
+  try {
+    const q = new URLSearchParams(window.location.search).get('store');
+    if (q === 'records') return true;
+    if (q === 'video') return false;
+    return localStorage.getItem('store_mode') === 'records';
+  } catch {
+    return false;
+  }
 }
 
 // Pack-merged themes, one clone per (theme id, pack id). getActiveTheme() is
