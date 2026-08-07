@@ -299,13 +299,13 @@ export const WALL_SHELF_HEIGHTS = [0.42, 1.295, 2.17, 3.045, 3.92, 4.795, 5.67, 
 /**
  * Along-run pitch per item.
  *
- * A face-out video case needs its own width. A record stands edge-on — an LP
- * jacket is a quarter-inch thick — so a bin packs them shoulder to shoulder at
- * a fraction of the pitch, which is exactly why a browser bin holds hundreds
- * where a shelf holds a dozen. 1.7 in leaves the sleeves readable as you push
- * them apart without pretending they have a video case's girth.
+ * A 12" LP sleeve is WIDER than a video case, not narrower, so a record rack
+ * needs slightly MORE pitch per facing — not less. (An earlier pass packed
+ * these at 1.7 in on the theory that records file edge-on like books; they do
+ * in a bin you look down into, but from an aisle that shows only card edges
+ * and no art, so the stock stays face-out and the pitch follows the sleeve.)
  */
-export const BOX_SPACING = IS_RECORD_STORE ? 0.14 : 0.58; // feet
+export const BOX_SPACING = IS_RECORD_STORE ? 0.62 : 0.58; // feet
 export const LEAN_ANGLE = -10 * Math.PI / 180; // 10 degrees in radians (0.1745) leaning backward
 export const STAGGER_OFFSET = -0.04; // Offset in feet — the rental copy peeks out on LEFT (-X) of the movie cover
 // A "section" is one signboard/divider bay -- 6 columns wide. Freestanding units

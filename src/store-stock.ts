@@ -70,12 +70,17 @@ function shapeHasRentalShell(shape?: string | null): boolean {
  */
 const BIN_LEAN_ANGLE = -0.32; // ~18 deg back, against a shelf's gentler tilt
 
-/** Resting orientation for one slot, turned into the bin if it holds a record. */
+/**
+ * Resting orientation for one slot.
+ *
+ * A record LEANS BACK further than a video case but keeps facing the aisle.
+ * Turning the sleeve a quarter turn about Y — filing it edge-on like a book —
+ * was wrong: from the aisle you then see nothing but a wall of quarter-inch
+ * card edges and no artwork at all. In a real bin the front record's FACE is
+ * what you see; the ones behind it are what you flip through.
+ */
 function slotOrientation(movie: Movie, rotationY: number): { rotY: number; rotX: number } {
-  if (!movie.album) return { rotY: rotationY, rotX: LEAN_ANGLE };
-  // Quarter turn about Y puts the sleeve face along the run: spine up, art
-  // facing the browser rather than the aisle.
-  return { rotY: rotationY + Math.PI / 2, rotX: BIN_LEAN_ANGLE };
+  return { rotY: rotationY, rotX: movie.album ? BIN_LEAN_ANGLE : LEAN_ANGLE };
 }
 
 function aisleMeshKey(libIdx: number, unitIdx: number, side: 'front' | 'back', movie: Movie): string {
