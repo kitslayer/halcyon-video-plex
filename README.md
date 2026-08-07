@@ -32,7 +32,7 @@ board on the gable, your movie posters in the windows.
 
 ![Standing just inside the doors](docs/screenshots/overview.jpg)
 
-**Try it right now, no server, no signup:** https://halcyon-video.github.io/halcyon-video/ — the full store running
+**Try it right now, no server, no signup:** https://kitslayer.github.io/halcyon-video-plex/ — the full store running
 on a synthetic demo library. Or take the
 [**45-second tour ▶**](https://youtu.be/TCkEpeL8Y3w) first.
 
@@ -46,8 +46,8 @@ on a synthetic demo library. Or take the
 ## What it is
 
 A Vite + TypeScript + **three.js** app (optionally Tauri-wrapped) that connects
-to **[Jellyfin](https://jellyfin.org/)** and procedurally builds a period video
-store from whatever you have: every library becomes an aisle, genres become
+to **[Jellyfin](https://jellyfin.org/)** or **[Plex](https://www.plex.tv/)** and
+procedurally builds a period video store from whatever you have: every library becomes an aisle, genres become
 signposted sections, duplicate quality versions stack behind the face copy, the
 worst-rated titles literally end up in the **Bargain Bin**. It runs 24/7 on an
 HTPC as our family's way to pick a movie — and when nobody's touching it, it
@@ -55,8 +55,8 @@ renders *nothing at all* and idles at near-zero CPU/GPU for days.
 
 The screenshots in this README show the store running its built-in demo
 catalog — public-domain classics on every shelf, no media server attached
-(the same thing the live demo link runs). Point it at your Jellyfin and every
-case becomes something you own. This isn't a tech demo that gets old in five
+(the same thing the live demo link runs). Point it at your Jellyfin or Plex and
+every case becomes something you own. This isn't a tech demo that gets old in five
 minutes; it's how our family has picked a movie every night for months.
 
 ---
@@ -489,7 +489,11 @@ bridge network works too. Serving through a reverse proxy or DNS name? Set
 sudo loginctl enable-linger $USER
 ```
 
-**Demo, no server:** https://halcyon-video.github.io/halcyon-video/ — or append `?demo=1` to any deployment.
+**Demo, no server:** https://kitslayer.github.io/halcyon-video-plex/ — or append `?demo=1` to any
+deployment. Demo mode never shows the login screen, so the demo looks the same
+as [upstream's](https://halcyon-video.github.io/halcyon-video/) — this fork's
+visible difference is the server picker in the Connection Center, which the demo
+skips. Point it at a real Plex server to see that.
 
 **Development:** `npm run build` must pass (tsc + line budgets +
 signage-config validation). Unit suites: `npm run test:rental`, `test:nav`,

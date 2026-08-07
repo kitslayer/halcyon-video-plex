@@ -199,14 +199,68 @@ describe('plex live server', { skip: live ? false : 'set PLEX_URL and PLEX_TOKEN
     await plex.stopActiveEncoding(plex.getLastHlsPlaySessionId()!);
   });
 
-  test('playback reporting is accepted', async () => {
+  test('playback progress is actually RECORDED by the server', async () => {
+    // Asserting these merely resolve is what hid a real bug: /:/timeline
+    // answers 200 to an update carrying duration=0 and then discards it, so
+    // Continue Watching silently never populated. Read the state back.
     const libs = await plex.fetchJellyfinLibrariesAndMovies(PLEX_URL!, PLEX_TOKEN!, '1');
-    const film = libs.flatMap((l) => l.movies).find((m) => !m.isSeries);
+    const film = libs.flatMap((l) => l.movies).find((m) => !m.isSeries && m.localPath);
     assert.ok(film);
-    // These swallow their own errors by design, so the assertion is that they
-    // resolve rather than hang or throw.
-    await plex.reportPlaybackStart(PLEX_URL!, PLEX_TOKEN!, film!.id);
-    await plex.reportPlaybackProgress(PLEX_URL!, PLEX_TOKEN!, film!.id, 600_000_000, false);
-    await plex.reportPlaybackStopped(PLEX_URL!, PLEX_TOKEN!, film!.id, 600_000_000);
+
+    const q = new URLSearchParams({ 'X-Plex-Token': PLEX_TOKEN! }).toString();
+    const readState = async () => {
+      const res = await fetch(`${PLEX_URL}/library/metadata/${film!.id}?${q}`, {
+        headers: { Accept: 'application/json' },
+      });
+      const m = (await res.json()).MediaContainer.Metadata[0];
+      return { viewOffset: m.viewOffset ?? null, lastViewedAt: m.lastViewedAt ?? null };
+    };
+    // Leave the library exactly as we found it, pass or fail.
+    const unscrobble = () =>
+      fetch(`${PLEX_URL}/:/unscrobble?key=${film!.id}&identifier=com.plexapp.plugins.library&${q}`)
+        .catch(() => {});
+
+    const before = await readState();
+    try {
+      // Ticks are 100 ns: 1 s = 10,000,000. Thirty minutes in, deliberately —
+      // Plex declines to store a resume point in the first couple of minutes of
+      // a title (60 s was ignored, 3 min stored), so a position too close to the
+      // start would fail this test for a reason that isn't a bug.
+      const THIRTY_MIN_TICKS = 30 * 60 * 10_000_000;
+      const THIRTY_MIN_MS = 30 * 60 * 1000;
+
+      await plex.reportPlaybackStart(PLEX_URL!, PLEX_TOKEN!, film!.id);
+      await plex.reportPlaybackProgress(PLEX_URL!, PLEX_TOKEN!, film!.id, THIRTY_MIN_TICKS, false);
+      await new Promise((r) => setTimeout(r, 1500)); // Plex writes asynchronously
+
+      const after = await readState();
+      assert.equal(after.viewOffset, THIRTY_MIN_MS, 'Plex should have stored a 30-minute resume position');
+      assert.ok(after.lastViewedAt, 'Plex should have stamped lastViewedAt');
+      assert.notDeepEqual(after, before, 'state must actually change');
+
+      await plex.reportPlaybackStopped(PLEX_URL!, PLEX_TOKEN!, film!.id, THIRTY_MIN_TICKS);
+    } finally {
+      await unscrobble();
+    }
+  });
+
+  test('a probe hands back the tracks the picker needs', async () => {
+    // Plex will not put Stream[] in a list response, so fetchItemPlaybackInfo
+    // carrying them out is the only path by which the audio/subtitle picker can
+    // be populated. main.ts reads MediaPlaybackInfo.mediaStreams for exactly
+    // this reason.
+    const libs = await plex.fetchJellyfinLibrariesAndMovies(PLEX_URL!, PLEX_TOKEN!, '1');
+    const film = libs.flatMap((l) => l.movies).find((m) => !m.isSeries && m.localPath);
+    assert.ok(film);
+    assert.ok(!film!.mediaStreams?.length, 'precondition: the catalog carries no streams on Plex');
+
+    const info = await plex.fetchItemPlaybackInfo(PLEX_URL!, PLEX_TOKEN!, '1', film!.id);
+    assert.ok(info, 'probe should return playback info');
+    assert.ok(info!.mediaStreams?.length, 'probe must carry the tracks out');
+    assert.ok(info!.mediaStreams!.some((s) => s.type === 'Audio'), 'expected an audio track');
+    for (const s of info!.mediaStreams!) {
+      assert.equal(typeof s.index, 'number');
+      assert.ok(s.type === 'Audio' || s.type === 'Subtitle');
+    }
   });
 });

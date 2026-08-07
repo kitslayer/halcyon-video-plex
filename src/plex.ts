@@ -793,9 +793,24 @@ function extractWatchState(item: any): Pick<Movie, 'played' | 'playCount' | 'las
  */
 const partKeyCache = new Map<string, string>();
 
-function rememberParts(item: any): void {
+/**
+ * Runtime in milliseconds per item, recorded from the same responses.
+ *
+ * Needed because Plex's /:/timeline SILENTLY DISCARDS an update whose
+ * `duration` is 0 — no viewOffset, no lastViewedAt, no error — and the
+ * reporting functions only receive an item id (they share the Jellyfin
+ * backend's signature, which needs no duration).
+ */
+const durationCache = new Map<string, number>();
+
+/** Record whatever a response tells us about an item, for the synchronous and
+ *  id-only callers that can't go fetch it themselves. */
+function rememberItem(item: any): void {
   const ratingKey = String(item?.ratingKey ?? '');
   if (!ratingKey) return;
+  if (typeof item?.duration === 'number' && item.duration > 0) {
+    durationCache.set(ratingKey, item.duration);
+  }
   (item?.Media ?? []).forEach((media: any, i: number) => {
     const key = media?.Part?.[0]?.key;
     if (key) {
@@ -840,7 +855,7 @@ function mapItemToMovie(
   libraryName: string,
   actorIndex?: ActorIndex
 ): Movie {
-  rememberParts(item);
+  rememberItem(item);
   const isSeries = item?.type === 'show';
   const durationMin = Math.round((item?.duration ?? 0) / MS_PER_MIN);
 
@@ -1063,7 +1078,7 @@ export async function fetchSeriesEpisodes(
       'X-Plex-Container-Size': 500,
     });
     return (c?.Metadata ?? []).map((item: any): Episode => {
-      rememberParts(item);
+      rememberItem(item);
       return {
         id: String(item?.ratingKey ?? ''),
         seriesId,
@@ -1101,7 +1116,7 @@ export async function fetchFirstEpisodeOfSeries(
     });
     const item = c?.Metadata?.[0];
     if (!item) return null;
-    rememberParts(item);
+    rememberItem(item);
     return { id: String(item.ratingKey), path: item?.Media?.[0]?.Part?.[0]?.file ?? '' };
   } catch (e) {
     console.error(`[Plex] Failed to fetch first episode for series ${seriesId}:`, e);
@@ -1111,7 +1126,38 @@ export async function fetchFirstEpisodeOfSeries(
 
 // ─── Playback reporting ──────────────────────────────────────────────────────
 
-/** Plex has one timeline endpoint for start/progress/stop; `state` is the verb. */
+/**
+ * Runtime of an item, from the sync cache or straight from the server.
+ *
+ * Cache misses are real: an episode played from the picker was recorded by
+ * fetchSeriesEpisodes(), but a title reached by some path that never touched
+ * the catalog would not be. One metadata GET, cached after.
+ */
+async function itemDurationMs(base: string, token: string, itemId: string): Promise<number> {
+  const cached = durationCache.get(String(itemId));
+  if (cached) return cached;
+  try {
+    const c = await plexGet(base, `/library/metadata/${itemId}`, token);
+    const item = c?.Metadata?.[0];
+    if (item) {
+      rememberItem(item);
+      return durationCache.get(String(itemId)) ?? 0;
+    }
+  } catch (e) {
+    console.warn(`[Plex] Could not read duration for item ${itemId}:`, e);
+  }
+  return 0;
+}
+
+/**
+ * Plex has one timeline endpoint for start/progress/stop; `state` is the verb.
+ *
+ * `duration` is NOT optional even though it looks like metadata Plex already
+ * has: an update carrying `duration=0` is accepted with a 200 and then thrown
+ * away — no viewOffset stored, no lastViewedAt, nothing in Continue Watching,
+ * and no error to notice. Verified against 1.43.3. So the runtime is looked up
+ * (and cached) rather than defaulted.
+ */
 async function reportTimeline(
   base: string,
   token: string,
@@ -1119,12 +1165,17 @@ async function reportTimeline(
   state: 'playing' | 'paused' | 'stopped',
   timeMs: number
 ): Promise<void> {
+  const duration = await itemDurationMs(base, token, itemId);
+  if (!duration) {
+    // Better to say so than to fire a request Plex will silently discard.
+    console.warn(`[Plex] No duration known for item ${itemId} — Plex will ignore this timeline update.`);
+  }
   await plexRequest('GET', plexUrl(base, '/:/timeline', token, {
     ratingKey: itemId,
     key: `/library/metadata/${itemId}`,
     state,
     time: Math.max(0, Math.round(timeMs)),
-    duration: 0,
+    duration,
   }));
 }
 
@@ -1215,10 +1266,15 @@ export async function fetchItemPlaybackInfo(
     const c = await plexGet(base, `/library/metadata/${itemId}`, token, { includeStreams: 1 });
     const item = c?.Metadata?.[0];
     if (!item) return undefined;
-    rememberParts(item);
+    rememberItem(item);
     const streams = extractStreamsFromPart(item?.Media?.[0]?.Part?.[0]);
     if (streams) streamCache.set(String(itemId), streams);
-    return extractPlaybackInfoFromMedia(item?.Media?.[0]);
+    const info = extractPlaybackInfoFromMedia(item?.Media?.[0]);
+    // Hand the tracks back to the caller: this probe is the ONLY point at which
+    // Plex will part with them, and launchVideoPlayback runs it immediately
+    // before it builds the player's track picker.
+    if (info && streams) info.mediaStreams = streams;
+    return info;
   } catch (e) {
     console.error(`[Plex] Failed to probe media info for item ${itemId}:`, e);
     return undefined;

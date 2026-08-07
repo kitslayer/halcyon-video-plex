@@ -194,6 +194,19 @@ export interface MediaPlaybackInfo {
   aspectRatio?: string;
   /** HDR class ("SDR", "HDR10", "DOVI", …) — lets the table flag HDR. */
   videoRange?: string;
+  /**
+   * Audio/subtitle tracks of this source, when the probe that produced this
+   * info also learned them.
+   *
+   * Unset on the Jellyfin path, which has no use for it: its catalog query
+   * already returns MediaStreams for every title, so Movie.mediaStreams is
+   * populated long before playback. The Plex backend cannot do that — Plex
+   * refuses to include per-track Stream[] data in a LIST response — so it
+   * carries the tracks out here on the one probe launchVideoPlayback already
+   * performs for the exact item it is about to open. Callers should prefer
+   * Movie.mediaStreams and fall back to this.
+   */
+  mediaStreams?: MediaStreamInfo[];
 }
 
 /** Container/codec info of one media source — see MediaPlaybackInfo. */

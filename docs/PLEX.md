@@ -187,3 +187,22 @@ path.)
 for JSON, and the Tauri transport didn't forward one. `jellyfin_request` in
 `src-tauri/src/lib.rs` takes an optional `accept` parameter now; rebuild the
 Tauri binary if you use it. The browser and Docker paths are unaffected.
+
+**`/:/timeline` silently discards an update with `duration=0`.** It answers
+`200`, stores nothing, and reports no error — so Continue Watching and resume
+positions just never appear. The runtime has to be sent with every update, which
+is why `plex.ts` caches each item's duration during the catalog sync (the
+reporting functions only receive an item id, since they share the Jellyfin
+backend's signature). A test asserts the server actually *recorded* the offset
+rather than merely accepting the request; the earlier version of that test only
+checked the call resolved, which is exactly how this shipped.
+
+**Plex won't store a resume point in the first couple of minutes of a title.**
+60 seconds in is ignored, 3 minutes in is stored. This is Plex being sensible
+about accidental starts, not a bug — but it will make a naive
+"report progress, read it back" test fail if it picks a position too close to
+the beginning.
+
+**Progress below ~5% or above ~90% behaves differently again** — near the end
+Plex marks the item watched and clears the offset instead of storing it. Worth
+knowing before reading too much into a resume position that vanished.

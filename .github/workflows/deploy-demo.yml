@@ -11,9 +11,21 @@
 # private repos). The published site is always public either way.
 name: Deploy demo to GitHub Pages
 
+#
+# FORK NOTE: this deploys from `plex-backend`, this fork's default branch —
+# NOT `master`, which is kept only as the unmodified upstream baseline so the
+# fork's diff stays readable. Deploying from master would publish a demo with
+# none of the Plex work in it.
+#
+# Demo mode never shows the login screen (see startDemoAndLoad in main.ts), so
+# the published demo looks the same as upstream's: the fork's visible difference
+# is the server picker in the Connection Center, which the demo skips. The point
+# of building it here is that the link in our README is ours and that CI proves
+# the fork builds.
+
 on:
   push:
-    branches: [master]
+    branches: [plex-backend]
   workflow_dispatch:
 
 permissions:

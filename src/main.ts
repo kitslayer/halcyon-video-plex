@@ -31,8 +31,6 @@ import {
   isHevcPassThroughEnabled,
   buildStaticStreamUrl,
   isDirectPlaySafe,
-  fetchItemPlaybackInfo,
-  MediaPlaybackInfo,
   MovieVersion,
   Episode,
   collectionTmdbIds,
@@ -47,6 +45,7 @@ import {
   getLoginCredentials,
   activeBackendLabel,
 } from './login-backend-ui';
+import { resolvePlaybackSource } from './playback-source';
 import {
   fetchComingSoonMovies,
   fetchDiscoverMovies,
@@ -3582,21 +3581,17 @@ export async function launchVideoPlayback(movie: Movie, overrideItemId?: string,
   // BEFORE playing: WebKitGTK silently drops audio tracks whose codec isn't in
   // its allowlist (AC3/EAC3/DTS, typical movie-rip audio) with no error, so
   // the player's own direct→HLS error fallback never has a chance to trigger.
-  // Movies carry this info from the catalog sync (Fields=MediaSources); a
-  // series episode (overrideItemId) isn't in the catalog, so probe it here.
-  const mediaInfo: MediaPlaybackInfo | undefined = overrideItemId
-    ? (userId ? await fetchItemPlaybackInfo(jellyfinUrl, token, userId, playbackId) : undefined)
-    : (version?.mediaPlaybackInfo ?? movie.mediaPlaybackInfo);
+  // Where those facts come from — catalog or a probe of this one item — depends
+  // on the backend and on whether this is a series episode; see
+  // playback-source.ts.
+  const { mediaInfo, streams } = await resolvePlaybackSource(
+    jellyfinUrl, token, userId, playbackId, movie, version, overrideItemId
+  );
   // Codec hint for buildHlsStreamUrl: HEVC sources get hevc pass-through
   // (fMP4) when the webview can decode it; everything else stays on TS.
   const sourceVideoCodec = mediaInfo?.videoCodec;
 
-  // Track picker data: the item's audio/subtitle streams came in with the
-  // catalog (Fields=MediaSources). For a series episode played by override id
-  // the series container has no streams — the picker then offers quality only
-  // and the Playback language/CC preferences below can't resolve a track.
-  const streams = (overrideItemId ? [] : (version?.mediaStreams ?? movie.mediaStreams)) || [];
-  const trackLabel = (s: { displayTitle?: string; language?: string; index: number }) =>
+  const trackLabel =(s: { displayTitle?: string; language?: string; index: number }) =>
     s.displayTitle || s.language || `Track ${s.index}`;
   const audioTracks = streams.filter((s) => s.type === 'Audio').map((s) => ({ index: s.index, label: trackLabel(s) }));
   const subtitleTracks = streams.filter((s) => s.type === 'Subtitle').map((s) => ({ index: s.index, label: trackLabel(s) }));
