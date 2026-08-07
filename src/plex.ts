@@ -811,11 +811,21 @@ const partKeyCache = new Map<string, string>();
  */
 const durationCache = new Map<string, number>();
 
+/**
+ * Ids known to be music. Plex serves audio from a DIFFERENT transcoder than
+ * video — /music/:/transcode/... — and answers 400 to a video transcode request
+ * for a track. buildStaticStreamUrl/buildHlsStreamUrl are synchronous and get
+ * only an id, so the type has to be remembered when it passes through.
+ */
+const musicItems = new Set<string>();
+
 /** Record whatever a response tells us about an item, for the synchronous and
  *  id-only callers that can't go fetch it themselves. */
 function rememberItem(item: any): void {
   const ratingKey = String(item?.ratingKey ?? '');
   if (!ratingKey) return;
+  const t = String(item?.type ?? '');
+  if (t === 'track' || t === 'album') musicItems.add(ratingKey);
   if (typeof item?.duration === 'number' && item.duration > 0) {
     durationCache.set(ratingKey, item.duration);
   }
@@ -1081,10 +1091,19 @@ export async function fetchSeriesEpisodes(
 ): Promise<Episode[]> {
   const base = normalizeUrl(plexUrl_);
   try {
-    const c = await plexGet(base, `/library/metadata/${seriesId}/allLeaves`, token, {
+    let c = await plexGet(base, `/library/metadata/${seriesId}/allLeaves`, token, {
       'X-Plex-Container-Start': 0,
       'X-Plex-Container-Size': 500,
     });
+    // /allLeaves walks a show's season->episode tree and returns NOTHING for an
+    // album, whose tracks are direct children. Fall back so a record's tracklist
+    // works through the same picker a series uses.
+    if (!(c?.Metadata ?? []).length) {
+      c = await plexGet(base, `/library/metadata/${seriesId}/children`, token, {
+        'X-Plex-Container-Start': 0,
+        'X-Plex-Container-Size': 500,
+      });
+    }
     return (c?.Metadata ?? []).map((item: any): Episode => {
       rememberItem(item);
       return {
@@ -1118,10 +1137,16 @@ export async function fetchFirstEpisodeOfSeries(
 ): Promise<{ id: string; path: string } | null> {
   const base = normalizeUrl(plexUrl_);
   try {
-    const c = await plexGet(base, `/library/metadata/${seriesId}/allLeaves`, token, {
+    let c = await plexGet(base, `/library/metadata/${seriesId}/allLeaves`, token, {
       'X-Plex-Container-Start': 0,
       'X-Plex-Container-Size': 1,
     });
+    if (!(c?.Metadata ?? []).length) {
+      c = await plexGet(base, `/library/metadata/${seriesId}/children`, token, {
+        'X-Plex-Container-Start': 0,
+        'X-Plex-Container-Size': 1,
+      });
+    }
     const item = c?.Metadata?.[0];
     if (!item) return null;
     rememberItem(item);
@@ -1246,7 +1271,10 @@ function mapAlbumToMovie(
     // drawn. artistId is kept so the inspect view can fetch one on demand.
     backdropUrl: undefined,
     dateCreated: typeof item?.addedAt === 'number' ? new Date(item.addedAt * 1000).toISOString() : '',
-    isSeries: false,
+    // An album is a CONTAINER of playable children, exactly like a series — and
+    // flagging it as one is what makes the existing picker open a tracklist
+    // instead of trying to play the album id, which Plex cannot stream.
+    isSeries: true,
     is4k: false,
     libraryName,
     studios: item?.studio ? [String(item.studio)] : [],
@@ -1551,10 +1579,28 @@ export function getCachedStreams(itemId: string): MediaStreamInfo[] | undefined 
  */
 export function buildStaticStreamUrl(plexUrl_: string, token: string, itemId: string, mediaSourceId?: string): string {
   const base = normalizeUrl(plexUrl_);
+  if (musicItems.has(String(itemId))) return buildMusicStreamUrl(base, token, itemId);
   const cacheKey = mediaSourceId !== undefined ? `${itemId}:${mediaSourceId}` : String(itemId);
   const partKey = partKeyCache.get(cacheKey) ?? partKeyCache.get(String(itemId));
   if (partKey) return plexUrl(base, partKey, token, { download: 0 });
   return plexUrl(base, `/library/metadata/${itemId}/file`, token);
+}
+
+/**
+ * Audio stream for a track. Plex's music transcoder hands back a plain MP3 over
+ * HTTP rather than a segmented playlist — simpler than the video path and what
+ * every Plex client uses for audio. FLAC and anything else the browser cannot
+ * decode natively is transcoded on the way out.
+ */
+function buildMusicStreamUrl(base: string, token: string, itemId: string): string {
+  return plexUrl(base, '/music/:/transcode/universal/start.mp3', token, {
+    path: `/library/metadata/${itemId}`,
+    protocol: 'http',
+    directPlay: 0,
+    directStream: 1,
+    maxAudioBitrate: 320,
+    session: `${itemId}-${Date.now()}`,
+  });
 }
 
 // PlaySessionId of the most recently built HLS URL, so a caller holding only
@@ -1587,6 +1633,9 @@ const COPY_VIDEO_BITRATE_KBPS = 200_000;
  */
 export function buildHlsStreamUrl(plexUrl_: string, token: string, itemId: string, opts?: HlsStreamOptions): string {
   const base = normalizeUrl(plexUrl_);
+  // Audio never goes down the video path: Plex answers 400 to a video transcode
+  // request for a track, which is why records would not play at all.
+  if (musicItems.has(String(itemId))) return buildMusicStreamUrl(base, token, itemId);
   const playSessionId = `${itemId}-${Date.now()}`;
   lastHlsPlaySessionId = playSessionId;
 
