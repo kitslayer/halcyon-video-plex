@@ -24,6 +24,7 @@ import {
   type PlexPin,
   type PlexServer,
 } from './backend.ts';
+import { getStoreMode, setStoreMode, type StoreMode } from './store-mode.ts';
 
 /** How often to ask plex.tv whether the code has been claimed. plex.tv rate
  *  limits this endpoint, and a person needs a few seconds to type the code
@@ -136,6 +137,22 @@ function applyFieldVisibility(backend: BackendName): void {
   for (const id of ['login-backend-jellyfin', 'login-backend-plex'] as const) {
     const btn = $<HTMLButtonElement>(id);
     if (btn) btn.setAttribute('aria-checked', String(id.endsWith(backend)));
+  }
+}
+
+/** Flip between the video shop and the record shop. Records are Plex-only, so
+ *  choosing them also nudges the server picker across — an empty record store
+ *  because the server can't read music is a confusing first run. */
+function selectStore(mode: StoreMode): void {
+  setStoreMode(mode);
+  for (const m of ['video', 'records'] as const) {
+    const btn = $<HTMLButtonElement>(`login-store-${m}`);
+    if (btn) btn.setAttribute('aria-checked', String(m === mode));
+  }
+  if (mode === 'records' && getBackend() !== 'plex') selectBackend('plex');
+  const desc = $<HTMLParagraphElement>('login-backend-desc');
+  if (desc && mode === 'records') {
+    desc.innerText = 'Stocks the shop from your music libraries — albums as records, filed by artist. Needs Plex.';
   }
 }
 
@@ -343,6 +360,9 @@ function storedMethod(): PlexMethod {
 export function initBackendLoginUi(opts?: { log?: (msg: string) => void }): void {
   if (opts?.log) logFn = opts.log;
 
+  $<HTMLButtonElement>('login-store-video')?.addEventListener('click', () => selectStore('video'));
+  $<HTMLButtonElement>('login-store-records')?.addEventListener('click', () => selectStore('records'));
+
   $<HTMLButtonElement>('login-backend-jellyfin')?.addEventListener('click', () => selectBackend('jellyfin'));
   $<HTMLButtonElement>('login-backend-plex')?.addEventListener('click', () => selectBackend('plex'));
 
@@ -356,6 +376,7 @@ export function initBackendLoginUi(opts?: { log?: (msg: string) => void }): void
   // Reflect whatever the last session chose (or ?backend=).
   selectMethod(storedMethod());
   selectBackend(getBackend());
+  selectStore(getStoreMode());
 }
 
 /**

@@ -1,0 +1,21 @@
+import puppeteer from 'puppeteer';
+const b=await puppeteer.launch({headless:'new',args:['--no-sandbox']});
+const p=await b.newPage(); await p.setViewport({width:1400,height:900});
+const errs=[]; p.on('console',m=>{if(m.type()==='error'&&!/WebGL|GL_|3D|layout\] ERROR/i.test(m.text()))errs.push(m.text().slice(0,100));});
+await p.goto('http://localhost:1420/?store=records&backend=plex',{waitUntil:'domcontentloaded',timeout:60000});
+await new Promise(r=>setTimeout(r,2500));
+await p.click('#login-plex-method-token'); await new Promise(r=>setTimeout(r,300));
+await p.evaluate(()=>{document.getElementById('login-url').value='http://192.168.1.148:32400';
+  document.getElementById('login-plex-token').value='yoX7fU4JNH15vR5UUW8h';});
+await p.evaluate(()=>document.getElementById('btn-login-submit').click());
+await p.waitForFunction(()=>/Loaded \d+ /.test(document.body.innerText),{timeout:120000});
+const log=await p.evaluate(()=>document.body.innerText.match(/\[System\][^\n]*/g).slice(-4));
+log.forEach(l=>console.log('   ',l.slice(0,90)));
+console.log('  errors:', errs.length?errs.slice(0,2):'none');
+// prove the video store is untouched
+await p.evaluate(()=>{localStorage.setItem('store_mode','video');});
+await p.goto('http://localhost:1420/?store=video&backend=plex',{waitUntil:'domcontentloaded',timeout:60000});
+await p.waitForFunction(()=>/Loaded \d+ /.test(document.body.innerText),{timeout:120000});
+const vlog=await p.evaluate(()=>document.body.innerText.match(/Loaded [^\n.]*/)[0]);
+console.log('\n  video store still fine:', vlog);
+await b.close();

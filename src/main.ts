@@ -15,7 +15,6 @@ measureDisplayHz();
 const isTauri = !!(window as any).__TAURI_INTERNALS__;
 function closeApp() { isTauri ? getCurrentWindow().close() : window.close(); }
 import {
-  fetchJellyfinLibrariesAndMovies,
   authenticateUser,
   validateToken,
   fetchPublicUsers,
@@ -46,6 +45,7 @@ import {
   activeBackendLabel,
 } from './login-backend-ui';
 import { resolvePlaybackSource } from './playback-source';
+import { loadStoreCatalog, isRecordStore } from './store-mode';
 import {
   fetchComingSoonMovies,
   fetchDiscoverMovies,
@@ -2775,7 +2775,7 @@ async function finishLoginAndLaunch(urlInput: string, session: MembershipLoginSe
   localStorage.setItem('jellyfin_userid', session.userId);
   localStorage.setItem('jellyfin_last_userid', session.userId); // remembered for next boot's card highlight
 
-  logToConsole('[System] Downloading movie libraries and catalog metadata...', 'system');
+  logToConsole(`[System] Downloading ${isRecordStore() ? 'record' : 'movie'} libraries and catalog metadata...`, 'system');
   // Stall watchdog, not a deadline — see the auto-login path for why a fixed
   // cap on total sync duration is unsurvivable for a large enough library.
   const LOGIN_STALL_MS = 45_000;
@@ -2792,7 +2792,7 @@ async function finishLoginAndLaunch(urlInput: string, session: MembershipLoginSe
   try {
     [librariesList] = await Promise.all([
       Promise.race([
-        fetchJellyfinLibrariesAndMovies(urlInput, session.accessToken, session.userId, armLoginStall),
+        loadStoreCatalog(urlInput, session.accessToken, session.userId, armLoginStall),
         loginTimeout
       ]),
       loadComingSoonMovies(),
@@ -2805,7 +2805,8 @@ async function finishLoginAndLaunch(urlInput: string, session: MembershipLoginSe
   const gapCount = await mergeCollectionGaps(librariesList);
   const totalMoviesCount = librariesList.reduce((acc, lib) => acc + lib.movies.length, 0);
 
-  logToConsole(`[System] Loaded ${librariesList.length} libraries (${totalMoviesCount} titles total). Launching store...`, 'system');
+  const unit = isRecordStore() ? ['departments', 'records'] : ['libraries', 'titles'];
+  logToConsole(`[System] Loaded ${librariesList.length} ${unit[0]} (${totalMoviesCount} ${unit[1]} total). Launching store...`, 'system');
   await logJellyseerrStatus(gapCount);
   if (gameMovies.length > 0) {
     logToConsole(`[System] Romm: ${gameMovies.length} game(s) loaded for the Video Games section.`, 'system');
@@ -3003,7 +3004,7 @@ async function checkCredentialsAndLoad() {
       try {
         [librariesList] = await Promise.all([
           Promise.race([
-            fetchJellyfinLibrariesAndMovies(jellyfinUrl, activeToken, activeUserId, armStall),
+            loadStoreCatalog(jellyfinUrl, activeToken, activeUserId, armStall),
             stallPromise
           ]),
           loadComingSoonMovies(),

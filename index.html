@@ -213,6 +213,13 @@
                 <!-- Which server this store is stocked from. Switching reshapes
                      the fields below: Jellyfin authenticates with a username and
                      password, Plex with a device-link code. -->
+                <!-- Which shop the store builds. Records need Plex (music
+                     sections are the ones the video sync skips) and are stocked
+                     from albums instead of films. -->
+                <div class="backend-toggle" id="login-store-toggle" role="radiogroup" aria-label="Store type">
+                  <button type="button" class="backend-option" id="login-store-video" role="radio" aria-checked="true">📼 Video Store</button>
+                  <button type="button" class="backend-option" id="login-store-records" role="radio" aria-checked="false">💿 Record Store</button>
+                </div>
                 <div class="backend-toggle" id="login-backend-toggle" role="radiogroup" aria-label="Media server">
                   <button type="button" class="backend-option" id="login-backend-jellyfin" role="radio" aria-checked="true">Jellyfin</button>
                   <button type="button" class="backend-option" id="login-backend-plex" role="radio" aria-checked="false">Plex</button>
