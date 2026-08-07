@@ -55,6 +55,29 @@ function shapeHasRentalShell(shape?: string | null): boolean {
   return !isRecordPlatform(shape ?? undefined);
 }
 
+
+// ─── Flip-through bins ──────────────────────────────────────────────────────
+
+/**
+ * A record shop does not face its stock outward. Records stand VERTICALLY in
+ * waist-high bins, spine up, packed tight, and you flip through them with your
+ * fingers — which is why a bin holds hundreds where a video shelf holds a
+ * dozen. Turning the sleeve a quarter turn about its own axis is what changes
+ * the whole reading of the room from "video store selling CDs" to "record shop".
+ *
+ * The lean is steeper than a shelf's too: a bin is raked back so the sleeves
+ * fan toward you and the front one is readable at a glance.
+ */
+const BIN_LEAN_ANGLE = -0.32; // ~18 deg back, against a shelf's gentler tilt
+
+/** Resting orientation for one slot, turned into the bin if it holds a record. */
+function slotOrientation(movie: Movie, rotationY: number): { rotY: number; rotX: number } {
+  if (!movie.album) return { rotY: rotationY, rotX: LEAN_ANGLE };
+  // Quarter turn about Y puts the sleeve face along the run: spine up, art
+  // facing the browser rather than the aisle.
+  return { rotY: rotationY + Math.PI / 2, rotX: BIN_LEAN_ANGLE };
+}
+
 function aisleMeshKey(libIdx: number, unitIdx: number, side: 'front' | 'back', movie: Movie): string {
   const base = `${libIdx}_${unitIdx}_${side}`;
   // Anything with a box shape of its own — a game's carton, a record's sleeve
@@ -691,8 +714,8 @@ export function buildAllMovieBoxes(scene: StoreScene) {
         restingX: xPos,
         restingY: yPos,
         restingZ: boxZ,
-        restingRotY: rotationY,
-        restingRotX: LEAN_ANGLE,
+          restingRotY: slotOrientation(movie, rotationY).rotY,
+          restingRotX: slotOrientation(movie, rotationY).rotX,
         aisleAngle: unitAngle,
         browseSign: fSign,
         depth: boxDepth,
@@ -766,8 +789,8 @@ export function buildAllMovieBoxes(scene: StoreScene) {
       restingX: bwX,
       restingY: yPos,
       restingZ: bwZ,
-      restingRotY: transform.rotationY,
-      restingRotX: LEAN_ANGLE,
+        restingRotY: slotOrientation(movie, transform.rotationY).rotY,
+        restingRotX: slotOrientation(movie, transform.rotationY).rotX,
       depth: boxDepth,
       currentX: bwX,
       currentY: yPos,
