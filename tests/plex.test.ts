@@ -5,7 +5,7 @@
  * run when PLEX_URL and PLEX_TOKEN are exported, so CI (and anyone without a
  * Plex server) still gets a green suite:
  *
- *   PLEX_URL=http://192.168.1.148:32400 PLEX_TOKEN=xxxx npm run test:plex
+ *   PLEX_URL=http://192.168.1.50:32400 PLEX_TOKEN=xxxx npm run test:plex
  */
 
 import { test, describe, before } from 'node:test';
