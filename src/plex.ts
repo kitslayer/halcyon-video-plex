@@ -621,7 +621,15 @@ export function buildUserAvatarUrl(plexUrl_: string, _userId: string, primaryIma
 function imageUrl(base: string, token: string, path: string | undefined, width: number, height: number): string | undefined {
   if (!path) return undefined;
   return plexUrl(base, '/photo/:/transcode', token, {
-    width, height, minSize: 1, upscale: 1, url: path,
+    width, height, url: path,
+    // `format`/`quality` are NOT optional tuning. Without them Plex answers a
+    // full-quality PNG — one 600px sleeve came back at 761 KB, and `upscale=1`
+    // made it worse by re-enlarging past the requested size. A library's worth
+    // of those is hundreds of megabytes of texture upload before anything is on
+    // a shelf. The same image as a quality-70 JPEG is ~56 KB: a 13x saving with
+    // no visible difference at the size a case is drawn.
+    format: 'jpeg',
+    quality: 70,
   });
 }
 
@@ -1231,9 +1239,12 @@ function mapAlbumToMovie(
     actors: [],
     genres: artist?.genres ?? [],
     localPath: '',
-    posterUrl: imageUrl(base, token, item?.thumb, 600, 600),
-    // Sleeve art is square; the artist portrait stands in for a backdrop.
-    backdropUrl: imageUrl(base, token, item?.parentThumb ?? item?.art, 1200, 1200),
+    posterUrl: imageUrl(base, token, item?.thumb, 500, 500),
+    // No per-album backdrop. The artist portrait is only ever wanted when a
+    // record is INSPECTED, and requesting a large one for every album in the
+    // shop cost a second full-size image per title for something almost never
+    // drawn. artistId is kept so the inspect view can fetch one on demand.
+    backdropUrl: undefined,
     dateCreated: typeof item?.addedAt === 'number' ? new Date(item.addedAt * 1000).toISOString() : '',
     isSeries: false,
     is4k: false,

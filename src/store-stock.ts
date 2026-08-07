@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { Movie } from './jellyfin';
 import { buildGoldClamshellFillers, getGoldCaseMaterials, repaintGoldCase } from './fixtures/gold-clamshell';
+import { isRecordPlatform } from './box-shapes';
 import { posterQueue, CASE_MEDIUM, CASE_HEIGHT, CASE_DEPTH, textureArrayManager, createClonedCaseGeometry, getGlobalFrontMaterials, getGlobalBackMaterials, updateGlobalMaterialsEnvMap, leftmostColorCache, posterPixelCache, reflectionProbes, isGlobalMaterial, lowResCache, createProgramWarmupMaterials, gameShapeKey, gameDimsForShape, gameCaseDims, customBoxPlatform, beginRebuildDrain, SERIES_DEPTH_MULT } from './video-case';
 import { AISLE_SHELF_HEIGHTS, WALL_SHELF_HEIGHTS, LEAN_ANGLE, STAGGER_OFFSET, UNIT_SIDE_CAPACITY, BACK_WALL_UNIT_IDX, sideEntrySlot, COPY_X_JITTER_RANGE, EXTRA_COPY_DEPTH_STEP, extraCopiesCount, isUnstockedTitle, seededRandom01, MovieSlot } from './store-layout';
 import { retailAudio } from './audio';
@@ -42,6 +43,17 @@ const scratchSpineColor = new THREE.Color();
 // still "this library, this unit, this side" for movie stock (byte-identical
 // to what it was), and every consumer just re-derives it from the movie.
 const AISLE_SHAPE_SEP = '|';
+
+
+/**
+ * A video-store slot holds TWO boxes — the retail cover in front and the shop's
+ * rental clamshell behind it. A record has no rental copy: the sleeve IS the
+ * object, so the shell must not be built or it stands in front of every album
+ * as a blank blue case.
+ */
+function shapeHasRentalShell(shape?: string | null): boolean {
+  return !isRecordPlatform(shape ?? undefined);
+}
 
 function aisleMeshKey(libIdx: number, unitIdx: number, side: 'front' | 'back', movie: Movie): string {
   const base = `${libIdx}_${unitIdx}_${side}`;
@@ -338,6 +350,7 @@ export function buildAllMovieBoxes(scene: StoreScene) {
               getGlobalBackMaterials(false),
               used
             );
+      backMesh.visible = shapeHasRentalShell(typeof shape !== 'undefined' ? shape : null);
             backMesh.castShadow = true;
             backMesh.receiveShadow = true;
             backMesh.frustumCulled = true;
@@ -367,6 +380,7 @@ export function buildAllMovieBoxes(scene: StoreScene) {
 
           // rental back mesh is always regular (false)
           const backMesh = new THREE.InstancedMesh(createClonedCaseGeometry(used, false, true), getGlobalBackMaterials(false), used);
+          backMesh.visible = true; // ordinary movie stock: always has a rental shell
           backMesh.castShadow = true;
           backMesh.receiveShadow = true;
           backMesh.frustumCulled = true;
@@ -399,6 +413,7 @@ export function buildAllMovieBoxes(scene: StoreScene) {
 
       // rental back mesh is always regular (false)
       const backMesh = new THREE.InstancedMesh(createClonedCaseGeometry(capacity, false, true, gameDims?.rental), getGlobalBackMaterials(false), capacity);
+      backMesh.visible = shapeHasRentalShell(typeof shape !== 'undefined' ? shape : null);
       backMesh.castShadow = true;
       backMesh.receiveShadow = true;
       backMesh.frustumCulled = true;

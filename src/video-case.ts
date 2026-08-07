@@ -5299,7 +5299,7 @@ export function createHeroJellyfinMaterials(movie: Movie, highlightedName?: stri
   // Series season boxsets keep the loose shrink-wrap film (ROADMAP B3);
   // movie cases get the medium's finish (paperboard / amaray polywrap).
   const finish = movie.isSeries ? 'shrinkwrap' as const : undefined;
-  const front = getPosterMaterial(movie.id, probeIdx, isAnimated, !!movie.game, pinEndcap ? 'endcap' : 'none', finish);
+  const front = getPosterMaterial(movie.id, probeIdx, isAnimated, hasCustomBox(movie), pinEndcap ? 'endcap' : 'none', finish);
 
   return [
     edgeMat,
