@@ -1571,6 +1571,164 @@ html, body {
   min-height: 48px;
 }
 
+/* ─── Backend picker (Jellyfin / Plex) ───────────────────────────────────── */
+/* A two-up segmented control rather than a <select>: there are exactly two
+   choices, it has to be operable from a couch with a remote's arrow keys, and
+   the selected side needs to read at a distance. */
+.backend-toggle {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 10px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+}
+
+.backend-option {
+  flex: 1;
+  padding: 8px 10px;
+  font-family: var(--font-title);
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.backend-option:hover {
+  color: #e2e8f0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.backend-option[aria-checked='true'] {
+  color: #0b1220;
+  background: var(--bb-yellow);
+  text-shadow: none;
+}
+
+.backend-option:focus-visible {
+  outline: 2px solid var(--bb-yellow);
+  outline-offset: 2px;
+}
+
+/* ─── Plex device link ───────────────────────────────────────────────────── */
+.plex-link-button {
+  width: 100%;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-family: var(--font-title);
+  font-size: 0.9rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #0b1220;
+  background: var(--bb-yellow);
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.plex-link-button:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.plex-link-box {
+  padding: 12px;
+  margin-bottom: 10px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 204, 0, 0.35);
+  border-radius: 6px;
+}
+
+.plex-link-instruction {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: #cbd5e1;
+}
+
+/* The code is meant to be read across a room, so it gets the largest type on
+   the screen and wide tracking to keep the characters individually legible. */
+.plex-link-code {
+  font-family: var(--font-title), monospace;
+  font-size: 2.6rem;
+  font-weight: bold;
+  letter-spacing: 0.5rem;
+  text-indent: 0.5rem; /* offsets the trailing letter-space so it reads centred */
+  color: var(--bb-yellow);
+  text-shadow: 0 0 12px rgba(255, 204, 0, 0.45);
+}
+
+.plex-link-status {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  min-height: 1.2em;
+}
+
+.plex-link-status.is-error { color: #f87171; }
+.plex-link-status.is-ok { color: #4ade80; }
+
+/* Sign-in method tabs. Smaller and quieter than the backend toggle above them
+   so the two rows of controls don't compete — that one is a decision about
+   which server, this one is a decision about how to prove who you are. */
+.plex-method-tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.plex-method {
+  flex: 1;
+  padding: 6px 4px;
+  font-family: var(--font-title);
+  font-size: 0.7rem;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.plex-method:hover {
+  color: #e2e8f0;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.plex-method[aria-selected='true'] {
+  color: var(--bb-yellow);
+  border-color: var(--bb-yellow);
+  background: rgba(255, 204, 0, 0.1);
+}
+
+.plex-method:focus-visible {
+  outline: 2px solid var(--bb-yellow);
+  outline-offset: 2px;
+}
+
+.plex-token-help {
+  min-height: 0;
+  margin-bottom: 10px;
+  font-size: 0.78rem;
+}
+
+.plex-token-help code {
+  padding: 1px 4px;
+  font-size: 0.95em;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+}
+
 .input-group {
   display: flex;
   flex-direction: column;

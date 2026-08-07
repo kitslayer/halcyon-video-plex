@@ -17,7 +17,8 @@
     "test:picks": "node --experimental-strip-types --test tests/staff-picks.test.ts",
     "test:promo": "node --experimental-strip-types --test tests/promo-campaigns.test.ts",
     "test:comingsoon": "node --experimental-strip-types --test tests/coming-soon-feed.test.ts",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:plex": "node --experimental-strip-types --test tests/plex.test.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

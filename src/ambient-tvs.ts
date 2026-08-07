@@ -12,6 +12,7 @@ async function loadHls() {
 }
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Movie } from './jellyfin';
+import { buildHlsStreamUrl } from './backend';
 import { CENTER_WALKWAY } from './store-layout';
 import { FixtureContext, StoreFixture } from './fixtures';
 import { loadProp } from './props';
@@ -142,7 +143,7 @@ export class AmbientTvs implements StoreFixture {
       const movie = pool[Math.floor(Math.random() * pool.length)];
       const durationMin = parseInt(movie.duration) || 90;
       const seekSec = durationMin * 60 * (0.05 + Math.random() * 0.60);
-      videoTex = this.makeVideoTexture(movie, durationMin, seekSec);
+      videoTex = this.makeVideoTexture(movie, seekSec);
       if (videoTex) {
         this.playingMovie = movie;
         this.ctx.log(`[System] CRT TVs: "${movie.title}" from ~${Math.round(seekSec / 60)}min`, 'system');
@@ -160,20 +161,26 @@ export class AmbientTvs implements StoreFixture {
   // Spin up the hidden <video> + HLS pipeline feeding the ceiling TVs. Returns
   // null when streaming isn't possible (no server, no MSE) — the TVs still get
   // built, just with dead screens.
-  private makeVideoTexture(movie: Movie, durationMin: number, seekSec: number): THREE.VideoTexture | null {
-    const base = this.ctx.jellyfinUrl.replace(/\/$/, '');
-    const qs = new URLSearchParams({
-      api_key: this.ctx.jellyfinToken,
-      MediaSourceId: movie.id,
-      VideoCodec: 'h264', AudioCodec: 'aac',
-      // The CRT screen mesh covers a few hundred pixels on-screen — decoding
-      // and re-uploading it at source resolution wastes decode CPU, HLS
-      // bandwidth, and server transcode capacity for no visible gain.
-      MaxWidth: '640', VideoBitrate: '600000', AudioBitrate: '128000',
-      MaxAudioChannels: '2', TranscodingProtocol: 'hls',
-      TranscodingContainer: 'ts', MinSegments: '1', BreakOnNonKeyFrames: 'true',
+  private makeVideoTexture(movie: Movie, seekSec: number): THREE.VideoTexture | null {
+    // Built through the shared backend builder rather than by hand: this URL
+    // used to be assembled inline in Jellyfin's `/Videos/{id}/master.m3u8`
+    // shape, which 404s against any other server (the ceiling TVs were the one
+    // place in the app that bypassed the builder).
+    //
+    // The caps are the point: the CRT screen mesh covers a few hundred pixels
+    // on-screen, so decoding and re-uploading at source resolution would waste
+    // decode CPU, bandwidth, and server transcode capacity for no visible gain.
+    const hlsSrc = buildHlsStreamUrl(this.ctx.jellyfinUrl, this.ctx.jellyfinToken, movie.id, {
+      maxWidth: 640,
+      maxBitrate: 600_000,
+      // Start the TRANSCODE partway in rather than starting at 0:00 and
+      // seeking the <video> element there. Plex's transcoder encodes forward
+      // from the session offset, so a client-side jump to ~40 minutes asks for
+      // a segment it hasn't produced and 404s the stream dead; Jellyfin
+      // tolerates it but pays the same slow-seek cost its own builder warns
+      // about. Ticks are 100 ns.
+      startPositionTicks: Math.round(seekSec) * 10_000_000,
     });
-    const hlsSrc = `${base}/Videos/${movie.id}/master.m3u8?${qs}`;
 
     const video = document.createElement('video');
     video.setAttribute('style', 'position:fixed;left:-9999px;width:1px;height:1px;');
@@ -209,10 +216,10 @@ export class AmbientTvs implements StoreFixture {
     video.addEventListener('resize', applyFullFill);
     this.refitVideoCrop = applyFullFill;
 
+    // The stream already starts at seekSec (startPositionTicks above), so there
+    // is nothing left to seek — just fill the screen and roll.
     const seekAndPlay = () => {
       applyFullFill(); // re-assert the full-frame fill once metadata is available
-      const maxSec = isFinite(video.duration) ? video.duration * 0.70 : durationMin * 60;
-      video.currentTime = Math.min(seekSec, maxSec);
       video.play().catch(() => {});
     };
 

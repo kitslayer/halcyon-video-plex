@@ -2,6 +2,7 @@ import type { Movie } from './jellyfin';
 import { recommend } from './clerk-recommend';
 import { brandString } from './brand-pack';
 
+import { requestsProviderLabel } from './backend.ts';
 /**
  * Clerk interaction layer (T14 Phase C).
  *
@@ -324,7 +325,7 @@ export class ClerkInteraction {
     this.dialog.innerHTML = '';
     this.dialog.appendChild(this.speech(
       `Now, "${movie.title}"${yr} we don't have on the shelf yet — ${sug.reason} ${tail}`));
-    this.hooks.onLog?.(`[Clerk] Suggests "${movie.title}"${yr} (Jellyseerr) — ${sug.reason}`);
+    this.hooks.onLog?.(`[Clerk] Suggests "${movie.title}"${yr} (${requestsProviderLabel()}) — ${sug.reason}`);
     const opts = this.optionList();
     let key = 1;
     if (!requested && this.hooks.onRequest) {

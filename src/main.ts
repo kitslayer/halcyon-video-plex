@@ -36,8 +36,17 @@ import {
   MovieVersion,
   Episode,
   collectionTmdbIds,
-  collectionSyncStats
-} from './jellyfin';
+  collectionSyncStats,
+  getBackend,
+  setBackend,
+  requestsProviderLabel,
+  backendLabel
+} from './backend';
+import {
+  initBackendLoginUi,
+  getLoginCredentials,
+  activeBackendLabel,
+} from './login-backend-ui';
 import {
   fetchComingSoonMovies,
   fetchDiscoverMovies,
@@ -198,25 +207,25 @@ function logDebugLogPath(): void {
 async function logJellyseerrStatus(gapCount: number): Promise<void> {
   logDebugLogPath();
   if (gapCount > 0) {
-    logToConsole(`[System] Jellyseerr: ${gapCount} missing title(s) shelved in partly-owned collections.`, 'system');
+    logToConsole(`[System] ${requestsProviderLabel()}: ${gapCount} missing title(s) shelved in partly-owned collections.`, 'system');
   }
   if (comingSoonMovies.length > 0) {
-    logToConsole(`[System] Jellyseerr: ${comingSoonMovies.length} coming-soon title(s) found.`, 'system');
+    logToConsole(`[System] ${requestsProviderLabel()}: ${comingSoonMovies.length} coming-soon title(s) found.`, 'system');
   }
   if (discoveryMovies.length > 0) {
-    logToConsole(`[System] Jellyseerr: ${discoveryMovies.length} trending title(s) shelved with a REQUEST sticker.`, 'system');
+    logToConsole(`[System] ${requestsProviderLabel()}: ${discoveryMovies.length} trending title(s) shelved with a REQUEST sticker.`, 'system');
   }
   if (isDemoMode || gapCount + comingSoonMovies.length + discoveryMovies.length > 0) return;
 
   if (!getJellyseerrConfig()) {
-    logToConsole('[System] Jellyseerr: not configured — coming-soon and recommendations disabled.', 'system');
+    logToConsole(`[System] ${requestsProviderLabel()}: not configured — coming-soon and recommendations disabled.`, 'system');
     return;
   }
   const ping = await pingJellyseerr();
   if (ping.ok) {
-    logToConsole('[System] Jellyseerr: connected, but no requests or discoveries to shelve.', 'system');
+    logToConsole(`[System] ${requestsProviderLabel()}: connected, but no requests or discoveries to shelve.`, 'system');
   } else {
-    logToConsole(`[System] Jellyseerr ERROR: ${ping.reason} — coming-soon and recommendations are OFF. Re-check the URL and API key on the membership screen.`, 'system');
+    logToConsole(`[System] ${requestsProviderLabel()} ERROR: ${ping.reason} — coming-soon and recommendations are OFF. Re-check the URL and API key on the membership screen.`, 'system');
   }
 }
 
@@ -384,7 +393,7 @@ async function mergeCollectionGaps(libraries: JellyfinLibrary[]): Promise<number
   if (merged === 0) {
     logToConsole(
       `[System] Collections: checked ${targets.length}, found nothing missing — ` +
-      'either you own them complete, or Jellyseerr rejected the lookup (see its status line).',
+      `either you own them complete, or ${requestsProviderLabel()} rejected the lookup (see its status line).`,
       'system'
     );
   }
@@ -907,7 +916,7 @@ const GROUP_HINTS: Record<SettingGroup, string> = {
   'Playback': 'Audio language, captions, and candy delivery.',
   'Video Games': 'Enable the game section and pick platforms.',
   'Performance': 'Graphics quality, render mode, FPS cap and counter.',
-  'Connection': 'Jellyfin, Jellyseerr and Romm servers.',
+  'Connection': `${backendLabel()}, ${requestsProviderLabel()} and Romm servers.`,
 };
 
 /** One-line blurbs under each sub-page's "›" row on its group page. */
@@ -3077,6 +3086,10 @@ function setupLoginHandlers() {
   const form = document.getElementById('login-form') as HTMLFormElement;
   const errorMsg = document.getElementById('login-error-msg') as HTMLDivElement;
 
+  // Backend picker + Plex device link. Reshapes the form to whichever server
+  // is selected before the user touches anything.
+  initBackendLoginUi({ log: (msg) => logToConsole(msg, 'system') });
+
   const demoBtn = document.getElementById('btn-demo-submit') as HTMLButtonElement | null;
   if (demoBtn) {
     demoBtn.addEventListener('click', () => {
@@ -3100,8 +3113,11 @@ function setupLoginHandlers() {
 
       const rawUrl = (document.getElementById('login-url') as HTMLInputElement).value.trim();
       const urlInput = normalizeUrl(rawUrl);
-      const userInput = (document.getElementById('login-user') as HTMLInputElement).value.trim();
-      const passInput = (document.getElementById('login-pass') as HTMLInputElement).value;
+      // Which fields hold the credentials depends on the selected backend:
+      // Jellyfin uses username + password, Plex uses the token from the device
+      // link (or a pasted one). See src/login-backend-ui.ts.
+      const { username: userInput, password: passInput } = getLoginCredentials();
+      const serverLabel = activeBackendLabel();
       // Jellyseerr is entirely optional -- both fields are blank by default and
       // saving an empty value clears any previously-saved config, so leaving
       // them blank silently disables the coming-soon feature.
@@ -3111,12 +3127,24 @@ function setupLoginHandlers() {
       const jellyseerrKeyInput = jellyseerrKeyEl?.value.trim() ?? '';
 
       try {
-        logToConsole(`[System] Contacting Jellyfin server: ${urlInput}`, 'system');
+        if (!userInput) {
+          throw new Error(
+            serverLabel === 'Plex'
+              ? 'Link with Plex first, or paste an X-Plex-Token.'
+              : 'Enter a username.'
+          );
+        }
+        logToConsole(`[System] Contacting ${serverLabel} server: ${urlInput}`, 'system');
         const session = await authenticateUser(urlInput, userInput, passInput);
 
         // Only the manual single-login form remembers username (to prefill);
         // the password is never persisted in plaintext localStorage.
         localStorage.setItem('jellyfin_username', userInput);
+        // Pin the backend these credentials belong to. Without this, a saved
+        // session could be auto-replayed against the OTHER backend on the next
+        // boot — which fails as a flood of 404s rather than a login error,
+        // because the URL is valid and only the API shape is wrong.
+        setBackend(getBackend());
 
         if (jellyseerrUrlInput && jellyseerrKeyInput) {
           localStorage.setItem('jellyseerr_url', jellyseerrUrlInput);
@@ -3142,11 +3170,13 @@ function setupLoginHandlers() {
       } catch (err: any) {
         logToConsole(`[System] Connection error: ${err.message}`, 'system');
         if (errorMsg) {
-          let userMsg = err.message || 'Failed to connect to Jellyfin server';
+          let userMsg = err.message || `Failed to connect to ${serverLabel} server`;
           if (userMsg.includes('HTTP error 401')) {
-            userMsg = 'Invalid username or password.';
+            userMsg = serverLabel === 'Plex'
+              ? 'That Plex token was rejected. Link again to get a fresh one.'
+              : 'Invalid username or password.';
           } else if (userMsg.includes('Failed to fetch') || userMsg.includes('NetworkError')) {
-            userMsg = `Unable to connect to "${urlInput}". Check the server address, CORS settings, and verify Jellyfin is online.`;
+            userMsg = `Unable to connect to "${urlInput}". Check the server address, CORS settings, and verify ${serverLabel} is online.`;
           }
           errorMsg.innerText = userMsg;
         }
@@ -3272,7 +3302,7 @@ async function handleDiscoveryRequest(movie: Movie) {
     logToConsole(`[System] "${movie.title}" can't be requested (missing TMDB id).`, 'system');
     return;
   }
-  logToConsole(`[System] Requesting "${movie.title}" through Jellyseerr...`, 'system');
+  logToConsole(`[System] Requesting "${movie.title}" through ${requestsProviderLabel()}...`, 'system');
   // StoreScene.orderTitle owns the flow (POST, chime, case restyle, and the
   // clerk's "we don't have any copies" line for collection gaps) so the
   // harness/demo input path stays identical to this one. This handler only
@@ -3286,7 +3316,7 @@ async function handleDiscoveryRequest(movie: Movie) {
     logToConsole(`[System] Requested "${movie.title}" -- it'll show as REQUESTED here once it's picked up.`, 'system');
     updateMovieHUD(movie);
   } else {
-    logToConsole(`[System] Failed to request "${movie.title}" (Jellyseerr unreachable or rejected the request).`, 'system');
+    logToConsole(`[System] Failed to request "${movie.title}" (${requestsProviderLabel()} unreachable or rejected the request).`, 'system');
   }
 }
 

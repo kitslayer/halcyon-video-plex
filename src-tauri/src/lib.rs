@@ -172,7 +172,12 @@ fn jellyfin_request(
     url: String,
     auth_header: Option<String>,
     token: Option<String>,
-    body: Option<String>
+    body: Option<String>,
+    // Response format the caller wants. Jellyfin answers JSON regardless, but
+    // Plex defaults to XML and only switches on an explicit Accept header —
+    // see plexRequest() in src/plex.ts. Optional so existing callers that omit
+    // it keep the previous behaviour exactly.
+    accept: Option<String>
 ) -> Result<String, String> {
     if cfg!(debug_assertions) {
         println!("[Jellyfin Request] {} {}", method, redact_url(&url));
@@ -196,6 +201,10 @@ fn jellyfin_request(
 
     if let Some(t) = token {
         req = req.header("X-MediaBrowser-Token", t);
+    }
+
+    if let Some(a) = accept {
+        req = req.header("Accept", a);
     }
 
     if let Some(b) = body {

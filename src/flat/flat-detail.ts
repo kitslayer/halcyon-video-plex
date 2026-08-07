@@ -1,4 +1,4 @@
-import { Movie, Episode, fetchSeriesEpisodes, fetchFirstEpisodeOfSeries } from '../jellyfin';
+import { Movie, Episode, fetchSeriesEpisodes, fetchFirstEpisodeOfSeries } from '../backend';
 import { launchGame } from '../romm';
 import { retailAudio } from '../audio';
 import { requestMovie, isDiscoveryRequested } from '../jellyseerr';

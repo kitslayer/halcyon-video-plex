@@ -194,7 +194,7 @@
         </div>
       </div>
 
-      <!-- Jellyfin Connection / Login Overlay -->
+      <!-- Media server Connection / Login Overlay -->
       <div id="login-overlay">
         <div class="login-logo-container">
           <svg class="bb-logo-svg" viewBox="0 0 640 400"><use href="#bb-ticket-logo"/></svg>
@@ -202,46 +202,119 @@
         <div class="login-card">
           <h2 class="login-title">HTPC Connection Center</h2>
           <p class="login-subtitle">Configure your media sources and integrations</p>
-          
+
           <form id="login-form">
             <div class="login-columns">
-              <!-- Column 1: Jellyfin -->
+              <!-- Column 1: media server (Jellyfin or Plex) -->
               <div class="login-column">
                 <div class="column-header">
-                  <h3 class="column-title">Jellyfin Server</h3>
+                  <h3 class="column-title" id="login-backend-title">Jellyfin Server</h3>
                 </div>
-                <p class="column-desc">Primary library provider for cataloging movies and retrieving poster artwork.</p>
-                
+                <!-- Which server this store is stocked from. Switching reshapes
+                     the fields below: Jellyfin authenticates with a username and
+                     password, Plex with a device-link code. -->
+                <div class="backend-toggle" id="login-backend-toggle" role="radiogroup" aria-label="Media server">
+                  <button type="button" class="backend-option" id="login-backend-jellyfin" role="radio" aria-checked="true">Jellyfin</button>
+                  <button type="button" class="backend-option" id="login-backend-plex" role="radio" aria-checked="false">Plex</button>
+                </div>
+                <p class="column-desc" id="login-backend-desc">Primary library provider for cataloging movies and retrieving poster artwork.</p>
+
                 <div class="input-group">
                   <label for="login-url">Server Address</label>
                   <input type="text" id="login-url" placeholder="http://192.168.1.50:8096" value="http://localhost:8096" required />
                 </div>
-                
-                <div class="input-group">
-                  <label for="login-user">Username</label>
-                  <input type="text" id="login-user" placeholder="Enter username" required />
+
+                <!-- Jellyfin credentials -->
+                <div id="login-jellyfin-fields">
+                  <div class="input-group">
+                    <label for="login-user">Username</label>
+                    <input type="text" id="login-user" placeholder="Enter username" />
+                  </div>
+
+                  <div class="input-group">
+                    <label for="login-pass">Password</label>
+                    <input type="password" id="login-pass" placeholder="Enter password (optional)" />
+                  </div>
                 </div>
-                
-                <div class="input-group">
-                  <label for="login-pass">Password</label>
-                  <input type="password" id="login-pass" placeholder="Enter password (optional)" />
+
+                <!-- Plex sign-in. Three ways in, because an HTPC is used from a
+                     couch with a remote AND set up from a keyboard:
+                       1. Device link — a code you type on your phone. No
+                          password entered with a remote, and 2FA is handled by
+                          plex.tv itself.
+                       2. Email + password — one form, fastest at a keyboard.
+                       3. Token — skips plex.tv entirely; nothing leaves the LAN.
+                     All three end with a token and the same server list. -->
+                <div id="login-plex-fields" hidden>
+                  <div class="plex-method-tabs" id="login-plex-methods" role="tablist" aria-label="Plex sign-in method">
+                    <button type="button" class="plex-method" id="login-plex-method-link" role="tab" aria-selected="true">Phone code</button>
+                    <button type="button" class="plex-method" id="login-plex-method-password" role="tab" aria-selected="false">Password</button>
+                    <button type="button" class="plex-method" id="login-plex-method-token" role="tab" aria-selected="false">Token</button>
+                  </div>
+
+                  <!-- 1. Device link -->
+                  <div id="login-plex-pane-link">
+                    <div class="plex-link-box" id="login-plex-linkbox" hidden>
+                      <p class="plex-link-instruction">On your phone, go to <strong>plex.tv/link</strong> and enter:</p>
+                      <div class="plex-link-code" id="login-plex-code">····</div>
+                      <p class="plex-link-status" id="login-plex-status">Waiting for you to enter the code…</p>
+                    </div>
+                    <button type="button" class="plex-link-button" id="login-plex-link-btn">Link with Plex</button>
+                  </div>
+
+                  <!-- 2. Email + password -->
+                  <div id="login-plex-pane-password" hidden>
+                    <div class="input-group">
+                      <label for="login-plex-email">Plex Email</label>
+                      <input type="text" id="login-plex-email" placeholder="you@example.com" autocomplete="username" />
+                    </div>
+                    <div class="input-group">
+                      <label for="login-plex-password">Plex Password</label>
+                      <input type="password" id="login-plex-password" placeholder="Your plex.tv password" autocomplete="current-password" />
+                    </div>
+                    <div class="input-group">
+                      <label for="login-plex-2fa">2FA Code (only if enabled)</label>
+                      <input type="text" id="login-plex-2fa" placeholder="6-digit code" inputmode="numeric" autocomplete="one-time-code" />
+                    </div>
+                    <button type="button" class="plex-link-button" id="login-plex-signin-btn">Sign in to Plex</button>
+                    <p class="plex-link-status" id="login-plex-signin-status"></p>
+                  </div>
+
+                  <!-- 3. Token -->
+                  <div id="login-plex-pane-token" hidden>
+                    <p class="column-desc plex-token-help">Paste an <strong>X-Plex-Token</strong> to connect without contacting plex.tv. Find one in Plex's web app: play anything, then <em>Get Info → View XML</em>, and copy <code>X-Plex-Token</code> out of the address bar.</p>
+                    <div class="input-group">
+                      <label for="login-plex-token">X-Plex-Token</label>
+                      <input type="password" id="login-plex-token" placeholder="20-character token" />
+                    </div>
+                  </div>
+
+                  <div class="input-group">
+                    <label for="login-plex-server">Server</label>
+                    <select id="login-plex-server" disabled>
+                      <option value="">Sign in to list your servers…</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              <!-- Column 2: Jellyseerr -->
+              <!-- Column 2: requests provider. Jellyseerr and Overseerr expose
+                   the same /api/v1 surface (Jellyseerr is a fork of Overseerr),
+                   so one client serves both — only the name changes with the
+                   selected backend. -->
               <div class="login-column">
                 <div class="column-header">
-                  <h3 class="column-title">Jellyseerr</h3>
+                  <h3 class="column-title" id="login-requests-title">Jellyseerr</h3>
                 </div>
-                <p class="column-desc">Connect Jellyseerr to enable a "Coming Soon" requests wall inside the store. Cover art for titles you don't own is fetched from TMDB's image CDN — Jellyseerr returns the artwork's address, not the artwork. Everything you already own is served by Jellyfin.</p>
+                <p class="column-desc" id="login-requests-desc">Connect Jellyseerr to enable a "Coming Soon" requests wall inside the store. Cover art for titles you don't own is fetched from TMDB's image CDN — Jellyseerr returns the artwork's address, not the artwork. Everything you already own is served by Jellyfin.</p>
 
                 <div class="input-group">
-                  <label for="login-jellyseerr-url">Jellyseerr Server (optional)</label>
+                  <label for="login-jellyseerr-url" id="login-requests-url-label">Jellyseerr Server (optional)</label>
                   <input type="text" id="login-jellyseerr-url" placeholder="http://192.168.1.50:5055" />
                 </div>
 
                 <div class="input-group">
-                  <label for="login-jellyseerr-key">Jellyseerr API Key (optional)</label>
+                  <label for="login-jellyseerr-key" id="login-requests-key-label">Jellyseerr API Key (optional)</label>
                   <input type="password" id="login-jellyseerr-key" placeholder="Enter API key for a Coming Soon wall" />
                 </div>
               </div>

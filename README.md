@@ -1,6 +1,23 @@
 # Halcyon Video — a 3D video store for your media server
 
-**Your Jellyfin library, rebuilt as a walkable 1990s video rental store.** Every
+> ### 🍿 This is a fork: **Halcyon Video with Plex support**
+>
+> Upstream ([halcyon-video/halcyon-video](https://github.com/halcyon-video/halcyon-video))
+> is Jellyfin-only. This fork adds a **Plex Media Server backend** — the store,
+> the shelves, the clerk, rentals and the back room all work the same, stocked
+> from Plex instead.
+>
+> Pick your server on the login screen. Jellyfin behaves exactly as upstream
+> does; nothing was taken away.
+>
+> **[→ Plex setup and design notes](docs/PLEX.md)**
+>
+> Upstream doesn't accept pull requests — [its license note](#license-and-how-this-project-is-run)
+> says *"Fork it, mod it, ship your own store — but keep it open,"* which is
+> what this is. GPL-3.0, same as upstream. Changes are listed in
+> [CHANGES-FORK.md](CHANGES-FORK.md).
+
+**Your Jellyfin or Plex library, rebuilt as a walkable 1990s video rental store.** Every
 movie you own is a case on a shelf. Browse the aisles under warm fluorescents,
 pull *Back to the Future* off the wall, flip it over and read the back of the
 box, carry it to the counter, and watch the clerk drop it in a bag that
@@ -387,8 +404,8 @@ This app's steady state is *days on a shelf*, and it's engineered like it:
 
 | You have | You get |
 |---|---|
-| **Jellyfin** (required — or demo mode) | The store, browsing, walk mode, playback, rentals, back room, clerk, themes, brand editor |
-| **Jellyseerr** (optional) | Recommendation clasps, REQUEST / COMING SOON cases, collection gaps, discovery shelving, staff picks, FOR YOU endcaps, "order it for me" |
+| **Jellyfin or Plex** (required — or demo mode) | The store, browsing, walk mode, playback, rentals, back room, clerk, themes, brand editor |
+| **Jellyseerr / Overseerr** (optional) | Recommendation clasps, REQUEST / COMING SOON cases, collection gaps, discovery shelving, staff picks, FOR YOU endcaps, "order it for me" |
 | **RomM** (optional) | The video-game department, native or in-browser game launching |
 | **Tauri build** (optional) | mpv playback command, HDMI-CEC control, system suspend, native game launch, CORS-free proxying |
 | Nothing at all | `?demo=1` — the full store on a synthetic library, no server, playback disabled |
@@ -406,8 +423,15 @@ Two optional features are the exceptions, and only while you use them:
 
 | Feature | Reaches | What for |
 |---|---|---|
-| **Jellyseerr discovery** | `image.tmdb.org` | Cover art for titles you *don't* own |
+| **Jellyseerr / Overseerr discovery** | `image.tmdb.org` | Cover art for titles you *don't* own |
 | **Remote Play** | `stun.l.google.com` | Finding your public address so a viewer outside your network can connect |
+| **Plex device link** (this fork) | `plex.tv` | Exchanging the on-screen code for a token, and listing your servers — only while you're logging in |
+
+On the Plex backend, cast portraits are the one thing that would otherwise add a
+per-face call to `metadata-static.plex.tv`, so the store routes them through
+*your* server's photo transcoder instead. Browsing a linked Plex library talks
+to nothing but your own machine. Signing in with a pasted `X-Plex-Token`
+(offered on the login screen) skips `plex.tv` altogether.
 
 Jellyseerr returns a TMDB *path* rather than the image itself — its own web UI
 fetches from that same CDN — so there is no copy on your server to serve

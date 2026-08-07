@@ -33,6 +33,7 @@ import type { LogoShape, LogoSpec } from './logo-spec';
 import { drawLogo, getLogoFontString } from './logo-renderer';
 import type { StoreScene } from './three-scene';
 
+import { backendLabel, requestsProviderLabel } from './backend.ts';
 export type SettingKind = 'toggle' | 'cycle' | 'text' | 'secret';
 export type ApplyMode = 'live' | 'rebuild-scene' | 'reload';
 export type SettingGroup = 'Connection' | 'Store Look' | 'Store Brand' | 'Playback' | 'Performance' | 'Video Games';
@@ -874,14 +875,22 @@ export function registerCoreSettings(): void {
   // exists, but is never persisted (see commitTextSetting's special case).
   const cred = (key: string, label: string, kind: SettingKind, opts?: Partial<SettingDef>): void =>
     registerSetting({ key, label, kind, group: 'Connection', default: '', applyMode: 'reload', ...opts });
-  cred('jellyfin_url', 'Jellyfin URL', 'text');
-  cred('jellyfin_username', 'Jellyfin Username', 'text');
+  // Labels follow the selected backend, but the STORAGE KEYS never change:
+  // both backends persist their address and token under the historical
+  // `jellyfin_*` names so an existing install keeps its session across the
+  // switch, and so there is exactly one place credentials live.
+  const server = backendLabel();
+  const requests = requestsProviderLabel();
+  cred('jellyfin_url', `${server} URL`, 'text');
+  cred('jellyfin_username', server === 'Plex' ? 'Plex Token' : 'Jellyfin Username', 'text');
   cred('jellyfin_password', 'Jellyfin Password', 'secret', {
-    hint: 'Blank keeps session. A password re-authenticates.',
+    hint: server === 'Plex'
+      ? 'Unused by Plex — the token above is the credential.'
+      : 'Blank keeps session. A password re-authenticates.',
   });
 
-  cred('jellyseerr_url', 'Jellyseerr URL', 'text');
-  cred('jellyseerr_apikey', 'Jellyseerr API Key', 'secret');
+  cred('jellyseerr_url', `${requests} URL`, 'text');
+  cred('jellyseerr_apikey', `${requests} API Key`, 'secret');
 
   // Remote Play: stream this running store, peer-to-peer, to any browser on
   // the network (see src/remote-play.ts). Live toggle — starts/stops hosting

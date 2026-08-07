@@ -16,7 +16,7 @@
 // reinterpreted here as its 2D equivalent: a canvas-drawn card face plus a
 // CSS glint sweep and heavy box-shadow to sell the laminated look.
 
-import { authenticateUser, buildUserAvatarUrl, type PublicUser } from './jellyfin';
+import { authenticateUser, buildUserAvatarUrl, type PublicUser } from './backend';
 import { getActiveTheme } from './themes';
 import { BB_ANTON, BB_ARCHIVO_BLACK } from './bundled-fonts';
 import { HALCYON_CREAM } from './logo-spec';
