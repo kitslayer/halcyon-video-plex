@@ -7,7 +7,7 @@
 // methods did.
 import * as THREE from 'three';
 import { Movie, Episode } from './jellyfin';
-import { posterQueue, CASE_MEDIUM, leftmostColorCache, posterPixelCache, getCaseGeometry, getRentalCaseGeometry, createHeroJellyfinMaterials, createHeroRentalMaterials, applyGameCaseArt, backCoverRegions, getSeriesBoxsetGeometry, createHeroSeriesBoxsetMaterials, drawSeriesBrandPanel, drawSeriesEpisodeBackCover, drawSeriesSeasonPanel, gameCaseDims, gameRentalDims } from './video-case';
+import { posterQueue, CASE_MEDIUM, leftmostColorCache, posterPixelCache, getCaseGeometry, getRentalCaseGeometry, createHeroJellyfinMaterials, createHeroRentalMaterials, applyGameCaseArt, backCoverRegions, getSeriesBoxsetGeometry, createHeroSeriesBoxsetMaterials, drawSeriesBrandPanel, drawSeriesEpisodeBackCover, drawSeriesSeasonPanel, gameCaseDims, gameRentalDims, customBoxPlatform } from './video-case';
 import { syncJewelDressing } from './jewel-case';
 import { AISLE_SHELF_HEIGHTS, WALL_SHELF_HEIGHTS, BACK_WALL_UNIT_IDX, MovieSlot } from './store-layout';
 import { tempPosition, tempRotation, tempQuaternion, tempScale, tempMatrix, _bagFallback, _bagBaseFallback } from './scene-shared';
@@ -585,7 +585,7 @@ export function updateBackCoverHighlight(scene: StoreScene) {
     // reads as the same stray strip the flipped view had.
     // Both branches are the RENTAL copy, so both take the shell's media-class
     // dims — never the game's retail carton (see gameRentalDims).
-    const shellDims = movie.game ? gameRentalDims(movie.platform) : undefined;
+    const shellDims = customBoxPlatform(movie) ? gameRentalDims(customBoxPlatform(movie)) : undefined;
     scene.heroBackMesh.geometry = (scene.isFlipped || scene.heroSpine)
       ? getCaseGeometry(false, shellDims)
       : getRentalCaseGeometry(false, shellDims);
@@ -599,8 +599,8 @@ export function ensureHeroCases(scene: StoreScene, movie: Movie, nrCase = false)
   // real carton, the shell behind it is the media-class rental case. Using
   // one set of dims for both is what squashed the clamshell to each game's
   // aspect, so the rental copy appeared to change size per title.
-  const gameDims = movie.game ? gameCaseDims(movie.platform, movie.discCount) : undefined;
-  const shellDims = movie.game ? gameRentalDims(movie.platform) : undefined;
+  const gameDims = customBoxPlatform(movie) ? gameCaseDims(customBoxPlatform(movie), movie.discCount) : undefined;
+  const shellDims = customBoxPlatform(movie) ? gameRentalDims(customBoxPlatform(movie)) : undefined;
   if (!scene.heroFrontMesh || !scene.heroBackMesh) {
     const geoFront = getCaseGeometry(isAnimated, gameDims);
     const geoBack = getRentalCaseGeometry(false, shellDims);

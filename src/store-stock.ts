@@ -8,7 +8,7 @@
 import * as THREE from 'three';
 import { Movie } from './jellyfin';
 import { buildGoldClamshellFillers, getGoldCaseMaterials, repaintGoldCase } from './fixtures/gold-clamshell';
-import { posterQueue, CASE_MEDIUM, CASE_HEIGHT, CASE_DEPTH, textureArrayManager, createClonedCaseGeometry, getGlobalFrontMaterials, getGlobalBackMaterials, updateGlobalMaterialsEnvMap, leftmostColorCache, posterPixelCache, reflectionProbes, isGlobalMaterial, lowResCache, createProgramWarmupMaterials, gameShapeKey, gameDimsForShape, gameCaseDims, beginRebuildDrain, SERIES_DEPTH_MULT } from './video-case';
+import { posterQueue, CASE_MEDIUM, CASE_HEIGHT, CASE_DEPTH, textureArrayManager, createClonedCaseGeometry, getGlobalFrontMaterials, getGlobalBackMaterials, updateGlobalMaterialsEnvMap, leftmostColorCache, posterPixelCache, reflectionProbes, isGlobalMaterial, lowResCache, createProgramWarmupMaterials, gameShapeKey, gameDimsForShape, gameCaseDims, customBoxPlatform, beginRebuildDrain, SERIES_DEPTH_MULT } from './video-case';
 import { AISLE_SHELF_HEIGHTS, WALL_SHELF_HEIGHTS, LEAN_ANGLE, STAGGER_OFFSET, UNIT_SIDE_CAPACITY, BACK_WALL_UNIT_IDX, sideEntrySlot, COPY_X_JITTER_RANGE, EXTRA_COPY_DEPTH_STEP, extraCopiesCount, isUnstockedTitle, seededRandom01, MovieSlot } from './store-layout';
 import { retailAudio } from './audio';
 import {
@@ -45,8 +45,11 @@ const AISLE_SHAPE_SEP = '|';
 
 function aisleMeshKey(libIdx: number, unitIdx: number, side: 'front' | 'back', movie: Movie): string {
   const base = `${libIdx}_${unitIdx}_${side}`;
-  return movie.game
-    ? `${base}${AISLE_SHAPE_SEP}${gameShapeKey(movie.platform, movie.discCount)}`
+  // Anything with a box shape of its own — a game's carton, a record's sleeve
+  // — batches per shape; ordinary movie stock shares the store-wide case.
+  const platform = customBoxPlatform(movie);
+  return platform
+    ? `${base}${AISLE_SHAPE_SEP}${gameShapeKey(platform, movie.discCount)}`
     : base;
 }
 
@@ -58,13 +61,15 @@ function aisleKeyShape(key: string): string | null {
 
 /**
  * Case height/depth for an aisle slot. Movies use the store-wide medium (with
- * the series-boxset depth bump); a game uses its platform's carton, exactly as
- * the game-section fixture does — including the fat jewel box for a multi-disc
- * title.
+ * the series-boxset depth bump); anything carrying its own box shape uses that
+ * instead — a game's platform carton or a record's sleeve, exactly as the
+ * game-section fixture does, including the fat jewel box for a multi-disc
+ * title or a double LP.
  */
 function aisleCaseDims(movie: Movie): { height: number; depth: number; liftDepth: number } {
-  if (movie.game) {
-    const d = gameCaseDims(movie.platform, movie.discCount);
+  const platform = customBoxPlatform(movie);
+  if (platform) {
+    const d = gameCaseDims(platform, movie.discCount);
     return { height: d.h, depth: d.d, liftDepth: d.d };
   }
   return {
@@ -257,8 +262,9 @@ export function buildAllMovieBoxes(scene: StoreScene) {
   // Game Boy carton can't share a batch with a PlayStation jewel case.
   const backWallMeshKey = (movie: Movie): string => {
     const base = isBackWallMovieAnimated(movie) ? 'back_wall_animated' : 'back_wall_regular';
-    return movie.game
-      ? `${base}${AISLE_SHAPE_SEP}${gameShapeKey(movie.platform, movie.discCount)}`
+    const platform = customBoxPlatform(movie);
+    return platform
+      ? `${base}${AISLE_SHAPE_SEP}${gameShapeKey(platform, movie.discCount)}`
       : base;
   };
   const backWallCounts = new Map<string, number>();

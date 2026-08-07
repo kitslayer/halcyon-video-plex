@@ -28,7 +28,11 @@ import { Movie } from './jellyfin';
 // Platforms whose retail case was a jewel case (clear lid over a paper
 // inlay). The keep-case consoles (PS2/GC/Xbox-era and the handheld cases)
 // are molded opaque polypropylene — a different object, never dressed.
-const JEWEL_PLATFORMS = new Set(['PLAYSTATION', 'SEGA SATURN', 'SEGA CD', 'DREAMCAST']);
+// 'COMPACT DISC' is the record shop's CD — the same pressed-polycarbonate jewel
+// box these consoles shipped in, which is exactly why it belongs in this set
+// rather than getting a second implementation. A vinyl LP is a card jacket and
+// is deliberately NOT here: it takes no jewel dressing.
+const JEWEL_PLATFORMS = new Set(['PLAYSTATION', 'SEGA SATURN', 'SEGA CD', 'DREAMCAST', 'COMPACT DISC']);
 
 export function isJewelCasePlatform(platform?: string): boolean {
   return !!platform && JEWEL_PLATFORMS.has(platform);

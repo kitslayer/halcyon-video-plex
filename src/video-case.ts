@@ -2,6 +2,13 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { Movie, Episode } from './jellyfin';
 import { loadGameFaceTexture, isTwoFlapSpine, jewelSpineComposite, uprightSpine } from './game-case-art';
+import {
+  GAME_BOX_IN, RECORD_BOX_IN, isRecordPlatform, customBoxPlatform, hasCustomBox,
+  recordDepthOverrideIn, recordShapeSuffix,
+} from './box-shapes';
+export { customBoxPlatform, hasCustomBox, RECORD_PLATFORM } from './box-shapes';
+// Both tables are one shape namespace: a record files beside a carton.
+const BOX_IN: Record<string, [number, number, number]> = { ...GAME_BOX_IN, ...RECORD_BOX_IN };
 import { isJewelCasePlatform, JEWEL_FAT_DEPTH_IN } from './jewel-case';
 import { getReviewSnippetForMovie } from './review-snippets';
 import { isDiscoveryRequested } from './jellyseerr';
@@ -440,6 +447,7 @@ const DISC_PLATFORMS = new Set<string>([
 export function isDiscPlatform(platform?: string): boolean {
   return !!platform && DISC_PLATFORMS.has(platform);
 }
+
 // FALLBACK dims for a platform with no carton on file: the movie mediums' dims
 // (shared object references, so geometry caches coalesce), picked by the
 // platform's media class instead of the store-wide CASE_MEDIUM. Platforms WITH
@@ -462,39 +470,10 @@ export const GAME_CLASS_DIMS: Record<'cart' | 'disc', { w: number; h: number; d:
 // entry against a real photo when one is on hand (the authority rule the 1993
 // POS art follows). A platform with NO entry keeps the generic clamshell shape,
 // which is the right answer for an odd cart a store would just sleeve.
-const GAME_BOX_IN: Record<string, [number, number, number]> = {
-  // Cartridge era — cardboard cartons and plastic clamshells.
-  'NES': [5.0, 7.0, 1.0],
-  'SNES': [7.5, 5.25, 1.1],              // NA landscape carton
-  'SUPER FAMICOM': [4.2, 7.5, 1.1],      // JP carton: tall and narrow, not a wide Snes box
-  'NINTENDO 64': [7.5, 5.25, 1.1],       // landscape carton
-  'GAME BOY': [4.75, 5.25, 0.9],         // near-square
-  'GAME BOY COLOR': [4.75, 5.25, 0.9],
-  'GAME BOY ADVANCE': [4.8, 5.4, 0.9],   // portrait, like the GB carton
-  'GENESIS': [5.5, 7.5, 1.2],
-  'SEGA MASTER SYSTEM': [5.5, 7.0, 1.0],
-  'ATARI': [5.0, 7.0, 1.0],
-  'TURBOGRAFX-16': [5.5, 4.9, 0.9],
-  'ARCADE': [5.0, 7.0, 1.0],             // Neo Geo AES cartons are far larger;
-                                         // a rental store sleeved odd carts.
-  // Optical era — jewel cases and keep cases.
-  'PLAYSTATION': [5.6, 4.9, 0.4],        // CD jewel case, landscape
-  'SEGA SATURN': [4.9, 5.6, 0.4],        // CD jewel case, portrait
-  'SEGA CD': [5.5, 7.9, 0.75],
-  'DREAMCAST': [5.5, 7.5, 0.6],
-  'PLAYSTATION 2': [5.3, 7.5, 0.55],     // DVD keep case
-  'GAMECUBE': [5.3, 7.4, 0.6],
-  'XBOX': [5.3, 7.5, 0.55],
-  'NINTENDO 3DS': [5.4, 4.75, 0.5],      // small keep case, landscape
-  'NINTENDO DSI': [5.4, 4.9, 0.5],       // DS-family keep case, landscape
-  'NINTENDO SWITCH': [4.2, 6.6, 0.45],   // portrait keep case
-  'PSP': [4.1, 6.7, 0.6],                // UMD case, portrait
-  'WII U': [5.3, 7.5, 0.6],              // DVD-footprint keep case
-};
 
 /** Does this platform have a real carton on file (vs. the generic clamshell)? */
 export function hasRealGameBox(platform?: string): boolean {
-  return !!platform && !!GAME_BOX_IN[platform];
+  return !!platform && !!BOX_IN[platform];
 }
 
 // Real size wins until it collides with the fixture. A box may not exceed the
@@ -514,15 +493,22 @@ const IN_TO_FT = 1 / 12;
 const gameBoxDimsCache = new Map<string, { w: number; h: number; d: number }>();
 
 export function gameCaseDims(platform?: string, discCount?: number): { w: number; h: number; d: number } {
-  const box = platform ? GAME_BOX_IN[platform] : undefined;
+  const box = platform ? BOX_IN[platform] : undefined;
   if (!box) return GAME_CLASS_DIMS[isDiscPlatform(platform) ? 'disc' : 'cart'];
   const fat = isJewelCasePlatform(platform) && (discCount ?? 1) >= 2;
-  const key = fat ? `${platform}#fat` : platform!;
+  const key = fat ? `${platform}#fat` : `${platform}${recordShapeSuffix(platform, discCount)}`;
   let dims = gameBoxDimsCache.get(key);
   if (!dims) {
     let [w, h, d] = box.map((v) => v * IN_TO_FT) as [number, number, number];
     if (fat) d = JEWEL_FAT_DEPTH_IN * IN_TO_FT;
-    const scale = Math.min(1, GAME_BOX_MAX_W / w, GAME_BOX_MAX_H / h);
+    const recordDepth = recordDepthOverrideIn(platform, discCount);
+    if (recordDepth !== undefined) d = recordDepth * IN_TO_FT;
+    // The cap keeps an oversized game carton inside a movie shelf's slot pitch.
+    // Records are exempt: a 12" LP sleeve being TWELVE INCHES is the whole
+    // visual identity of a record shop, and they get fixtures sized for them
+    // rather than being squeezed into shelving built for videotapes.
+    const capped = !isRecordPlatform(platform);
+    const scale = capped ? Math.min(1, GAME_BOX_MAX_W / w, GAME_BOX_MAX_H / h) : 1;
     dims = { w: w * scale, h: h * scale, d };
     // Ride the marker on the dims object itself: getGeometry() sees only dims,
     // and a jewel case needs its corners near-sharp where every other case
@@ -1781,12 +1767,15 @@ class PosterLoadingQueue {
       // so filling also pulls the art back to the true box proportions. Only a
       // platform with no carton on file still contain-fits onto the generic
       // clamshell ('cart'), where bars beat distorting art onto a wrong shape.
-      const mode: DecodeMode = item.movie.game
-        ? (hasRealGameBox(item.movie.platform) ? 'fill' : 'cart')
+      // A record's sleeve art is authored for its own square-ish face, so it
+      // fills like a carton with a real box on file and never takes the crop.
+      const boxPlatform = customBoxPlatform(item.movie);
+      const mode: DecodeMode = boxPlatform
+        ? (hasRealGameBox(boxPlatform) ? 'fill' : 'cart')
         : POSTER_CROP_X > 0 ? 'vhs' : 'crop';
       // 'cart' still needs the target face aspect for its contain-fit.
       const { highResData, lowResData, leftmostColor, edgeBusy } = await posterWorkerPool.decode(
-        url, mode, mode === 'cart' ? gameFaceAspect(item.movie.platform) : undefined);
+        url, mode, mode === 'cart' ? gameFaceAspect(boxPlatform) : undefined);
 
       // Priority lane: this task caches the decoded pixels and fires the
       // settle callbacks that texturesReadyPromise (the boot overlay) waits on,
@@ -2077,10 +2066,11 @@ export function loadDecorPosterTexture(movie: Movie, onReady: (tex: THREE.Textur
   if (waiting) { waiting.push(onReady); return; }
   if (!movie.posterUrl) return;
   cleanDecorPending.set(movie.id, [onReady]);
-  const mode: DecodeMode = movie.game
-    ? (hasRealGameBox(movie.platform) ? 'fill' : 'cart')
+  const boxPlatform = customBoxPlatform(movie);
+  const mode: DecodeMode = boxPlatform
+    ? (hasRealGameBox(boxPlatform) ? 'fill' : 'cart')
     : 'crop';
-  posterWorkerPool.decode(movie.posterUrl, mode, mode === 'cart' ? gameFaceAspect(movie.platform) : undefined)
+  posterWorkerPool.decode(movie.posterUrl, mode, mode === 'cart' ? gameFaceAspect(boxPlatform) : undefined)
     .then(({ highResData }) => {
       const tex = createPosterDataTexture(highResData);
       uploadTextureNow(tex);
@@ -4616,7 +4606,7 @@ export function createMovieInstancedMeshes(movie: Movie, count: number): Instanc
       queueTextureUpload(() => {
         // 'fixture' pin: these decor-bin meshes hold the material for the
         // scene's lifetime, so their texture must not be LRU-evicted (#97).
-        frontMats[4] = getPosterMaterial(movie.id, probeIdx, false, !!movie.game, 'fixture');
+        frontMats[4] = getPosterMaterial(movie.id, probeIdx, false, hasCustomBox(movie), 'fixture');
         const hexColor = leftmostColorCache.get(movie.id) || null;
         frontMats[1] = getJellyfinSpineMaterial(hexColor, probeIdx);
         front.material = [...frontMats];
@@ -4632,7 +4622,7 @@ export function createMovieInstancedMeshes(movie: Movie, count: number): Instanc
 
     if (movie.posterUrl) {
       posterQueue.load(movie, priority, () => { // dedupes in-flight requests itself
-        frontMats[4] = getPosterMaterial(movie.id, probeIdx, false, !!movie.game, 'fixture');
+        frontMats[4] = getPosterMaterial(movie.id, probeIdx, false, hasCustomBox(movie), 'fixture');
         const hexColor = leftmostColorCache.get(movie.id) || null;
         frontMats[1] = getJellyfinSpineMaterial(hexColor, probeIdx);
         front.material = [...frontMats];
