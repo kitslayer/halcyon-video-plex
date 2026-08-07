@@ -51,7 +51,14 @@ export function getBackend(): BackendName {
   } catch {
     /* no storage — fall through */
   }
-  const baked = (import.meta as any)?.env?.VITE_MEDIA_BACKEND;
+  // MUST be written as a literal `import.meta.env.X` access: Vite replaces that
+  // exact expression at build time. Writing it defensively as
+  // `(import.meta as any)?.env?.X` type-checks and looks safer, but the
+  // optional chain stops the substitution — `import.meta.env` is then plain
+  // `undefined` in the browser and a baked-in default silently never applies.
+  // The typeof guard is the pattern the rest of the codebase uses (see
+  // jellyseerr.ts) and keeps this working under plain Node in tests.
+  const baked = typeof import.meta.env !== 'undefined' ? import.meta.env.VITE_MEDIA_BACKEND : undefined;
   if (isBackendName(baked)) return baked;
   return 'jellyfin';
 }

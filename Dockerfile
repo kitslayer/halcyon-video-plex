@@ -3,8 +3,9 @@
 #   docker compose up -d          # or:
 #   docker build -t halcyon-video . && docker run --init -p 1420:1420 halcyon-video
 #
-# Serves http://<host>:1420 — first boot shows the Jellyfin login (append
-# ?demo=1 for the synthetic demo library, no server needed). This runs the
+# Serves http://<host>:1420 — first boot shows the media-server login, where
+# you pick Jellyfin or Plex (append ?demo=1 for the synthetic demo library, no
+# server needed; ?backend=plex to preselect Plex). This runs the
 # project's documented server runtime (`npm run serve`: vite preview plus the
 # middleware in vite.config.ts), so the Jellyseerr/Romm integration proxy,
 # F8 feedback pins and the whole Remote Play stack work — including private
@@ -45,6 +46,15 @@ COPY . .
 ARG VITE_JELLYFIN_URL
 ARG VITE_JELLYFIN_USERNAME
 ARG VITE_JELLYFIN_PASSWORD
+
+# Which media server this image is built for: "jellyfin" (default) or "plex".
+# Only sets the DEFAULT — the login screen's picker still switches at runtime,
+# and a saved choice wins. Bake it when the image serves one known server:
+#   docker build -t halcyon-video --build-arg VITE_MEDIA_BACKEND=plex .
+# On Plex, VITE_JELLYFIN_URL is the Plex address and VITE_JELLYFIN_USERNAME is
+# an X-Plex-Token (the password is unused) — the storage keys kept their
+# historical names so existing installs keep working.
+ARG VITE_MEDIA_BACKEND
 
 RUN npm run build
 

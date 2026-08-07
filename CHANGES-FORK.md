@@ -34,6 +34,7 @@ Fork point: `1be31d6` (Merge pull request #35 from halcyon-video/dev).
 | `index.html` | Backend toggle, Plex link panel, backend-aware labels. |
 | `src/styles.css` | Styles for the picker and the link code. |
 | `src-tauri/src/lib.rs` | `jellyfin_request` takes an optional `accept` header (Plex answers XML without it). Additive; existing callers unchanged. |
+| `Dockerfile` | `VITE_MEDIA_BACKEND` build arg, so an image can default to Plex. |
 | `package.json` | Adds `test:plex`. |
 | `README.md` | Fork notice, Plex in the integration tables, plex.tv in the outbound-calls table. |
 
